@@ -1,23 +1,22 @@
 
 
-//type bool  = boolean; type str  = string; type int  = number;
-
-type SERVER_MAINS_T = { app:any, db:any, Firestore:any, sheets:any, notifications:any, sse:any, appversion:number, validate_request:(res:any, req:any)=>Promise<string> }
-const SERVER_MAINS:SERVER_MAINS_T = { app:{}, db:{}, Firestore:{}, sheets:{}, notifications:{}, sse:{}, appversion: 0, validate_request: (_req:any) => Promise.resolve("") }
-
+import { SSE_TriggersE, ServerMainsT, str, INSTANCE_T  } from '../defs_server.js'
 import Finance from "./finance.js"
 import Admin_Firestore from "./admin/admin_firestore.js"
 
 
+const SERVER_MAINS:ServerMainsT = { app:{}, db:{}, appversion:0, sheets:{}, notifications:{}, firestore: {}, influxdb:{}, validate_request: (_req:any) => Promise.resolve("") }
 
 
-function Set_Server_Mains(app:any, db:any, sheets:any, notifications:any, appversion:number, validate_request:any) {
-    SERVER_MAINS.app = app 
-    SERVER_MAINS.db = db
-    SERVER_MAINS.sheets = sheets
-    SERVER_MAINS.notifications = notifications
-    SERVER_MAINS.appversion = appversion
-    SERVER_MAINS.validate_request = validate_request
+function Set_Server_Mains(m:ServerMainsT) {
+	SERVER_MAINS.app = m.app 
+	SERVER_MAINS.db = m.db
+	SERVER_MAINS.appversion = m.appversion
+	SERVER_MAINS.sheets = m.sheets
+	SERVER_MAINS.notifications = m.notifications
+	SERVER_MAINS.firestore = m.firestore
+	SERVER_MAINS.influxdb = m.influxdb
+	SERVER_MAINS.validate_request = m.validate_request
 }
 
 
@@ -43,7 +42,7 @@ async function grab_em(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await Finance.Grab_Em(SERVER_MAINS.db, SERVER_MAINS.Firestore)
+    const r = await Finance.Grab_Em(SERVER_MAINS.db, SERVER_MAINS.firestore)
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -55,7 +54,7 @@ async function finance_ynab_sync_categories(req:any, res:any) {
     
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const categories = await Finance.YNAB_Sync_Categories(SERVER_MAINS.db, SERVER_MAINS.Firestore)
+    const categories = await Finance.YNAB_Sync_Categories(SERVER_MAINS.db, SERVER_MAINS.firestore)
     res.status(200).send(JSON.stringify(categories))
 }
 

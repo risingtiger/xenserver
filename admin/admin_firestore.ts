@@ -21,7 +21,7 @@ const Misc_Update = async (db: any) => {
         for (const t of items) {
 
             const updateobj = {
-                ynab_id: ""
+                date: t.ts
             }
 
             batch.update(collection.doc(t.id), updateobj);

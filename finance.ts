@@ -6,7 +6,8 @@
 //import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
 import SSE from "../sse.js"
-import { SSE_TriggersE  } from '../definitions.js'
+import { SSE_TriggersE  } from '../defs_server.js'
+import {   } from './defs_instance_server.js'
 
 
 const YNAB_HOLDEM_ACCOUNT_ID = "b0b3f2b2-5067-4f57-a248-15fa97a18cf5"
@@ -24,7 +25,7 @@ const payees_to_skip = [
 
 
 
-async function Grab_Em(db:any, Firestore:any) {   return new Promise<any>(async (res, _rej)=> {
+async function Grab_Em(_db:any, _firestore:any) {   return new Promise<any>(async (res, _rej)=> {
 
     const token = process.env.XEN_YNAB
 
