@@ -512,7 +512,22 @@ const Save_Quick_Note = (db:any, amount:number, note:string) => new Promise<stri
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transactions, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Month_Snapshots, Save_Quick_Note };
+async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promise<any>(async (res, rej)=> {
+
+    monthSnapshot.area = db.collection("areas").doc(monthSnapshot.area.id)
+    monthSnapshot.issaved = true
+    monthSnapshot.ts = Math.floor(Date.now() / 1000)
+
+    const docRef = db.collection('monthsnapshots').doc()
+    await docRef.set(monthSnapshot).catch((err:any)=> { rej(err); return })
+
+    res({ok:true})
+})}
+
+
+
+
+const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transactions, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Month_Snapshots, Save_Quick_Note, Add_MonthSnapshot };
 
 export default Finance;
 

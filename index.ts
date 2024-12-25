@@ -47,6 +47,7 @@ function Set_Routes() {
     SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          finance_update_merchant_name)
     SERVER_MAINS.app.post(  '/api/xen/finance/save_month_snapshots',                          finance_save_month_snapshots)
     SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                               firestore_save_quick_note)
+    SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                             finance_add_monthsnapshot)
 
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_update',                            admin_firestore_misc_update)
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_get',                               admin_firestore_misc_get)
@@ -179,6 +180,18 @@ async function firestore_save_quick_note(req:any, res:any) {
 	console.log(req.body)
     await Finance.Save_Quick_Note(SERVER_MAINS.db, Number(req.body.amount), req.body.note)
     res.status(200).send("ok")
+}
+
+
+
+
+async function finance_add_monthsnapshot(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const r = await Finance.Add_MonthSnapshot(SERVER_MAINS.db, req.body.monthSnapshot)
+
+    res.status(200).send(JSON.stringify(r))
 }
 
 
