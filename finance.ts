@@ -1,13 +1,10 @@
 
 
-//type str = string; //type int = number; type bool = boolean;
 
 
 //import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
-import SSE from "../sse.js"
-import { SSE_TriggersE  } from '../defs_server.js'
-import {   } from './defs_instance_server.js'
+import { SSETriggersE  } from './defs_server_symlink.js'
 
 
 const YNAB_HOLDEM_ACCOUNT_ID = "b0b3f2b2-5067-4f57-a248-15fa97a18cf5"
@@ -17,9 +14,7 @@ const YNAB_FAMILY_ACCOUNT_ID = "dbb7396b-413f-40d7-9a3f-7c986e485233"
 
 
 const payees_to_skip = [
-    "APPLECARD GSBANK", 
-    "Starting Balance",
-    "AMZN Mktp"
+	// not currently being used at all. may pick it back up in future. For now, just manually ignoring in interface and adding to ignored_transactions
 ]
 
 
@@ -27,6 +22,7 @@ const payees_to_skip = [
 
 async function Grab_Em(_db:any, _firestore:any) {   return new Promise<any>(async (res, _rej)=> {
 
+	//@ts-ignore
     const token = process.env.XEN_YNAB
 
     let promises:any[] = [
@@ -87,6 +83,7 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
     const batch        = db.batch()
 
+	//@ts-ignore
     const token = process.env.XEN_YNAB
 
     const r = await Firestore.Retrieve(db, ["areas", "cats"])
@@ -227,6 +224,7 @@ async function Get_YNAB_Raw_Transactions(db:any) {   return new Promise<any>(asy
 
     const promises:any[] = []
 
+	//@ts-ignore
     const token = process.env.XEN_YNAB
 
     let d = new Date()
@@ -247,11 +245,14 @@ async function Get_YNAB_Raw_Transactions(db:any) {   return new Promise<any>(asy
         }
     }))
 
+	promises.push(db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get())
+
     promises.push(db.collection("transactions").orderBy("ts", "desc").limit(200).get())
 
     let r = await Promise.all(promises)
 
-    const existing_transactions = r[2].docs.map((m: any) => ({ id: m.id, ...m.data() }));
+	const ignored_transactions  = r[2].docs.map((m: any) => m.data().ynab_id)
+    const existing_transactions = r[3].docs.map((m: any) => ({ id: m.id, ...m.data() }));
 
     const ynab_t_holdem =               await r[0].json()
     const ynab_t_family =               await r[1].json()
@@ -265,7 +266,8 @@ async function Get_YNAB_Raw_Transactions(db:any) {   return new Promise<any>(asy
 
     for(const nt of combined_ynab_t) {
 
-        if (is_transaction_irrelevant(nt)) continue
+		if (ignored_transactions.includes(nt.id)) continue
+        if (is_transaction_irrelevant(nt))        continue
 
         const d = new Date()
         d.setUTCFullYear(nt.date.slice(0,4))
@@ -334,49 +336,140 @@ function is_transaction_irrelevant(t:any) {
 
 
 
-async function Save_Transactions_And_Delete_YNAB_Records(db:any, transactions:any) {   return new Promise<any>(async (res, rej)=> {
+async function Save_Transactions(db:any, sse:any, transactions:any) {   return new Promise<any>(async (res, rej)=> {
 
     const batch = db.batch()
 	const now = Math.floor(Date.now() / 1000)
 
     for(const nt of transactions) {
 
-        const d = {
-            amount: nt.amount,
-            cat: db.collection("cats").doc(nt.cat_id),
-            merchant: nt.merchant,
-            notes: nt.notes,
-            source: db.collection("sources").doc(nt.source_id),
-            tags: nt.tag_ids.map((m:string)=> db.collection("tags").doc(m)),
-            ynab_id: nt.ynab_id,
-			transacted_ts: nt.ts,
-            ts: now
-        }
+		if (nt.ignore) {
+			const docref = db.collection("ignored_transactions").doc()
+			const d = { ynab_id: nt.ynab_id, ts: nt.ts }
+			batch.set(docref, d)
 
-        const docref = db.collection('transactions').doc()
-        batch.set(docref, d)
+		} else {
+			const d = {
+				amount: nt.amount,
+				cat: db.collection("cats").doc(nt.cat_id),
+				date: nt.ts,
+				merchant: nt.merchant,
+				notes: nt.notes,
+				source: db.collection("sources").doc(nt.source_id),
+				tags: nt.tag_ids.map((m:string)=> db.collection("tags").doc(m)),
+				ynab_id: nt.ynab_id,
+				transacted_ts: nt.ts,
+				ts: now
+			}
+			const docref = db.collection('transactions').doc()
+			batch.set(docref, d)
+		}
     }
 
     batch.commit().catch((err:any)=> { rej(err); return })
 
-	SSE.TriggerEvent(SSE_TriggersE.FIRESTORE, {paths: ["transactions"]})
-
-
-    /*
-    const token = process.env.XEN_YNAB
-
-    transactions.forEach(async (t:any)=> {
-
-        await fetch(`https://api.ynab.com/v1/budgets/${YNAB_HOLDEM_ACCOUNT_ID}/transactions/${t.ynab_id}`, {
-            method: 'DELETE',
-            headers: {
-                "Authorization": `Bearer ${token}`
-            }
-        })
-    })
-    */
+	sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["transactions"]})
 
     res({ok:true})
+})}
+
+
+
+
+async function Patch_Transaction(db:any, id:string, changed:any) {   return new Promise<any>(async (res, rej)=> {
+
+	const now = Math.floor(Date.now() / 1000)
+	const d:any = {}
+
+	if (changed.cat_id) {
+		d.cat = db.collection("cats").doc(changed.cat_id)
+	}
+	if (changed.merchant) {
+		d.merchant = changed.merchant
+	}
+	if (changed.notes) {
+		d.notes = changed.notes
+	}
+	if (changed.tag_id) {
+		d.tags = [db.collection("tags").doc(changed.tag_id)]
+	}
+	if (changed.amount) {
+		d.amount = changed.amount
+	}
+	if (changed.date) {
+		d.date = changed.date
+	}
+
+	d.ts = now
+
+	const docref = db.collection('transactions').doc(id)
+	await docref.set(d, {merge:true}).catch((err:any)=> { rej(err); return })
+
+    res({ok:true})
+})}
+
+
+
+
+async function Patch_Buckets(db:any, catupdates:{id:string,bucket:number}[], area_id:string|null, area_buckets_changed:any|null) {   return new Promise<any>(async (res, _rej)=> {
+
+	const now = Math.floor(Date.now() / 1000)
+	let batch        = db.batch()
+
+	for(const update of catupdates) {
+		const d:any = { ts: now, bucket: update.bucket }
+		const docref = db.collection('cats').doc(update.id)
+		batch.update(docref, d)
+	}
+
+	if (area_id && area_buckets_changed) {
+		const docref = db.collection('areas').doc(area_id)
+
+		const d:any = { ts: now }
+
+		if (area_buckets_changed.bucketquad3) {
+			d.bucketquad3 = area_buckets_changed.bucketquad3
+			d.bucketquad3_ref_ts = now
+		}
+
+		if (area_buckets_changed.bucketquad4) {
+			d.bucketquad4 = area_buckets_changed.bucketquad4
+			d.bucketquad4_ref_ts = now
+		}
+
+		docref.set(d, {merge:true}).catch((err:any)=> { console.error(err); return })
+	}
+
+	await batch.commit().catch((er:any)=> console.error(er))
+
+    res({ok:true})
+})}
+
+
+
+
+async function Update_Merchant_Name(db:any, newname:string, oldname:string) {   return new Promise<any>(async (res, _rej)=> {
+
+	const now = Math.floor(Date.now() / 1000)
+
+	const collection   = db.collection("transactions")
+	const snapshot     = await collection.where("merchant", "==", oldname).get()
+	const transactions = snapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+
+	let batch        = db.batch()
+
+	for (const t of transactions) {
+
+		const updateobj = {
+			merchant: newname,
+			ts: now
+		}
+		batch.update(collection.doc(t.id), updateobj);
+	}
+
+	await batch.commit().catch((er:any)=> console.error(er))
+
+	res({return_str:"Done Updating Merchant Name"})
 })}
 
 
@@ -403,6 +496,24 @@ async function Save_Month_Snapshots(db:any, snapshots:any) {   return new Promis
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transactions_And_Delete_YNAB_Records, Save_Month_Snapshots };
+const Save_Quick_Note = (db:any, amount:number, note:string) => new Promise<string>(async (res, _rej)=> {
+
+	const docRef = db.collection('quick_notes').doc();
+
+	await docRef.set({
+		amount: amount,
+		note: note,
+		ts: Math.floor(Date.now() / 1000)
+	});
+
+	res("ok");
+})
+
+
+
+
+const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transactions, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Month_Snapshots, Save_Quick_Note };
 
 export default Finance;
+
+
