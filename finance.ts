@@ -4,7 +4,7 @@
 
 //import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
-import { SSETriggersE  } from './defs_server_symlink.js'
+import { SaveNewTransactionServerT } from './defs.js'
 
 
 const YNAB_HOLDEM_ACCOUNT_ID = "b0b3f2b2-5067-4f57-a248-15fa97a18cf5"
@@ -336,39 +336,15 @@ function is_transaction_irrelevant(t:any) {
 
 
 
-async function Save_Transactions(db:any, sse:any, transactions:any) {   return new Promise<any>(async (res, rej)=> {
+async function Save_Transaction(db:any, nt:SaveNewTransactionServerT) {   return new Promise<any>(async (res, rej)=> {
+	debugger
 
-    const batch = db.batch()
-	const now = Math.floor(Date.now() / 1000)
+	nt.cat = db.collection("cats").doc(nt.cat)
+	nt.source = db.collection("sources").doc(nt.source)
+	nt.tags = nt.tags.map((m:string)=> db.collection("tags").doc(m))
+	nt.ts = Math.floor(Date.now() / 1000)
 
-    for(const nt of transactions) {
-
-		if (nt.ignore) {
-			const docref = db.collection("ignored_transactions").doc()
-			const d = { ynab_id: nt.ynab_id, ts: nt.ts }
-			batch.set(docref, d)
-
-		} else {
-			const d = {
-				amount: nt.amount,
-				cat: db.collection("cats").doc(nt.cat_id),
-				date: nt.ts,
-				merchant: nt.merchant,
-				notes: nt.notes,
-				source: db.collection("sources").doc(nt.source_id),
-				tags: nt.tag_ids.map((m:string)=> db.collection("tags").doc(m)),
-				ynab_id: nt.ynab_id,
-				transacted_ts: nt.ts,
-				ts: now
-			}
-			const docref = db.collection('transactions').doc()
-			batch.set(docref, d)
-		}
-    }
-
-    batch.commit().catch((err:any)=> { rej(err); return })
-
-	sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["transactions"]})
+	const docref = db.collection('transactions').doc()
 
     res({ok:true})
 })}
@@ -376,7 +352,7 @@ async function Save_Transactions(db:any, sse:any, transactions:any) {   return n
 
 
 
-async function Patch_Transaction(db:any, id:string, changed:any) {   return new Promise<any>(async (res, rej)=> {
+async function Patch_Transaction(db:any, id:string, changed:any) {   return new Promise<any>(async (res, _rej)=> {
 
 	const now = Math.floor(Date.now() / 1000)
 	const d:any = {}
@@ -403,9 +379,12 @@ async function Patch_Transaction(db:any, id:string, changed:any) {   return new 
 	d.ts = now
 
 	const docref = db.collection('transactions').doc(id)
-	await docref.set(d, {merge:true}).catch((err:any)=> { rej(err); return })
+	await docref.set(d, {merge:true}).catch((_err:any)=> { res(null); return })
 
-    res({ok:true})
+	const r = await docref.get().catch((_err:any)=> { res(null); return })
+	const data = { id: r.id, ...r.data() }
+
+    res(data)
 })}
 
 
@@ -475,27 +454,6 @@ async function Update_Merchant_Name(db:any, newname:string, oldname:string) {   
 
 
 
-async function Save_Month_Snapshots(db:any, snapshots:any) {   return new Promise<any>(async (res, rej)=> {
-
-    const batch = db.batch()
-
-    for(const snapshot of snapshots) {
-
-        snapshot.area = db.collection("areas").doc(snapshot.areaid)
-        delete snapshot.areaid
-
-        const docref = db.collection('monthsnapshots').doc()
-        batch.set(docref, snapshot)
-    }
-
-    batch.commit().catch((err:any)=> { rej(err); return })
-
-    res({ok:true})
-})}
-
-
-
-
 const Save_Quick_Note = (db:any, amount:number, note:string) => new Promise<string>(async (res, _rej)=> {
 
 	const docRef = db.collection('quick_notes').doc();
@@ -527,7 +485,7 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transactions, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Month_Snapshots, Save_Quick_Note, Add_MonthSnapshot };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
 
 export default Finance;
 
