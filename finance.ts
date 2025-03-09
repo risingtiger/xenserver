@@ -345,8 +345,13 @@ async function Save_Transaction(db:any, nt:SaveNewTransactionServerT) {   return
 	nt.ts = Math.floor(Date.now() / 1000)
 
 	const docref = db.collection('transactions').doc()
+	await docref.set(nt).catch((err:any) => {
+		console.error("Error saving transaction:", err)
+		rej(err)
+		return
+	})
 
-    res({ok:true})
+    res({ok:true, id: docref.id})
 })}
 
 
