@@ -351,7 +351,15 @@ async function Save_Transaction(db:any, nt:SaveNewTransactionServerT) {   return
 		return
 	})
 
-    res({ok:true, id: docref.id})
+	// Retrieve the complete document and return it
+	const savedDoc = await docref.get().catch((err:any) => {
+		console.error("Error retrieving saved transaction:", err)
+		rej(err)
+		return
+	})
+	
+	const completeTransaction = { id: docref.id, ...savedDoc.data() }
+    res({ok:true, id: docref.id, transaction: completeTransaction})
 })}
 
 
