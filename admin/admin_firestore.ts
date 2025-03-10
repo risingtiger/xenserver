@@ -22,7 +22,8 @@ const Misc_Update = async (db: any) => {
 		debugger
         for (const t of items) {
 			const updateobj = {
-				bucket: 0
+				bucket: 0,
+				cat: db.doc('cats/123456')
 			}
 			
 			//batch.update(collection.doc(t.id), updateobj);
