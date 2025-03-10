@@ -12,8 +12,8 @@ const Misc_Update = async (db: any) => {
 
     return new Promise<any>(async (res, _rej)=> {
 
-        const collection = db.collection("cats")
-        const catRef = db.doc('cats/f80ffd84-23ab-4d20-a711-bc75a9d4faa7')
+        const collection = db.collection("transactions")
+        const catRef = db.doc('cats/812331aa-74ff-42e8-9d23-6c3d67a0aff1')
         const snapshot = await collection.where('cat', '==', catRef).get()
         const items = snapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
 
@@ -24,10 +24,11 @@ const Misc_Update = async (db: any) => {
 			const updateobj = {
 				bucket: 0
 			}
-			batch.update(collection.doc(t.id), updateobj);
+			
+			//batch.update(collection.doc(t.id), updateobj);
         }
 
-        await batch.commit().catch((er:any)=> console.error(er))
+        //await batch.commit().catch((er:any)=> console.error(er))
 
         res({return_str:"Done Misc Update"})
   })
