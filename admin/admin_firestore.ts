@@ -13,7 +13,8 @@ const Misc_Update = async (db: any) => {
     return new Promise<any>(async (res, _rej)=> {
 
         const collection = db.collection("cats")
-        const snapshot = await collection.where('area', '==', null).get()
+        const catRef = db.doc('cats/f80ffd84-23ab-4d20-a711-bc75a9d4faa7')
+        const snapshot = await collection.where('cat', '==', catRef).get()
         const items = snapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
 
         let batch        = db.batch()
