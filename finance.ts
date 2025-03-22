@@ -5,10 +5,9 @@
 //import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
 import { SaveNewTransactionServerT } from './defs.js'
+import FinanceYnabTransactions from "./finance_ynabtransactions.js"
 
 
-const YNAB_HOLDEM_ACCOUNT_ID = "b0b3f2b2-5067-4f57-a248-15fa97a18cf5"
-const YNAB_FAMILY_ACCOUNT_ID = "dbb7396b-413f-40d7-9a3f-7c986e485233"
 
 
 
@@ -220,124 +219,7 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
 
 
-async function Get_YNAB_Raw_Transactions(db:any) {   return new Promise<any>(async (res, _rej)=> {
-
-    const promises:any[] = []
-
-	//@ts-ignore
-    const token = process.env.XEN_YNAB
-
-    let d = new Date()
-    d.setMonth(d.getMonth() - 1)
-    let since_date = `${d.getUTCFullYear()}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-${d.getUTCDate().toString().padStart(2, '0')}`
-
-    promises.push(fetch(`https://api.ynab.com/v1/budgets/${YNAB_HOLDEM_ACCOUNT_ID}/transactions?since_date=${since_date}`, {
-        method: 'GET',
-        headers: {
-            "Authorization": `Bearer ${token}`
-        }
-    }))
-
-    promises.push(fetch(`https://api.ynab.com/v1/budgets/${YNAB_FAMILY_ACCOUNT_ID}/transactions?since_date=${since_date}`, {
-        method: 'GET',
-        headers: {
-            "Authorization": `Bearer ${token}`
-        }
-    }))
-
-	promises.push(db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get())
-
-    promises.push(db.collection("transactions").orderBy("ts", "desc").limit(200).get())
-
-    let r = await Promise.all(promises)
-
-	const ignored_transactions  = r[2].docs.map((m: any) => m.data().ynab_id)
-    const existing_transactions = r[3].docs.map((m: any) => ({ id: m.id, ...m.data() }));
-
-    const ynab_t_holdem =               await r[0].json()
-    const ynab_t_family =               await r[1].json()
-
-    ynab_t_holdem.data.transactions.forEach((m:any)=> m.preset_area_id = null)
-    ynab_t_family.data.transactions.forEach((m:any)=> m.preset_area_id = YNAB_FAMILY_ACCOUNT_ID)
-
-    const combined_ynab_t = [...ynab_t_holdem.data.transactions, ...ynab_t_family.data.transactions]
-
-    const ynab_raw_transactions:any[] = []
-
-    for(const nt of combined_ynab_t) {
-
-		if (ignored_transactions.includes(nt.id)) continue
-        if (is_transaction_irrelevant(nt))        continue
-
-        const d = new Date()
-        d.setUTCFullYear(nt.date.slice(0,4))
-        d.setUTCMonth( Number(nt.date.slice(5,7)) - 1)
-        d.setUTCDate(nt.date.slice(8,10))
-        d.setUTCHours(10)
-        d.setUTCMinutes(0)
-        d.setUTCSeconds(0)
-
-        if (nt.amount < 0) {
-
-            if (nt.subtransactions.length) {
-
-                for(const st of nt.subtransactions) {
-
-                    if (existing_transactions.find((t:any)=> t.ynab_id === st.id)) continue
-
-                    const raw_transaction = {
-                        ynab_id: st.id,
-                        preset_area_id: nt.preset_area_id,
-                        preset_cat_name: st.category_name || null,
-                        amount: Math.abs(st.amount) / 1000,
-                        merchant: nt.payee_name,
-                        notes: nt.memo || "",
-                        source_id: nt.account_id,
-                        tags: nt.flag_name ? [nt.flag_name] : [],
-                        ts: Math.floor(d.getTime() / 1000)
-                    }
-
-                    ynab_raw_transactions.push(raw_transaction)
-                }
-
-            } else {
-
-                if (existing_transactions.find((t:any)=> t.ynab_id === nt.id)) continue
-
-                const raw_transaction = {
-                    ynab_id: nt.id,
-                    preset_area_id: nt.preset_area_id,
-                    preset_cat_name: nt.category_name || null,
-                    amount: Math.abs(nt.amount) / 1000,
-                    merchant: nt.payee_name,
-                    notes: nt.memo || "",
-                    source_id: nt.account_id,
-                    tags: nt.flag_name ? [nt.flag_name] : [],
-                    ts: Math.floor(d.getTime() / 1000)
-                }
-
-                ynab_raw_transactions.push(raw_transaction)
-            }
-        }
-    }
-
-    res({ok:true, raw_transactions: ynab_raw_transactions})
-})}
-
-function is_transaction_irrelevant(t:any) {
-
-    const x = payees_to_skip.find((m:string)=> {
-        const p = t.import_payee_name_original || t.payee_name
-        return p.includes(m)
-    })
-    return x ? true : false
-}
-
-
-
-
-async function Save_Transaction(db:any, nt:SaveNewTransactionServerT) {   return new Promise<any>(async (res, rej)=> {
-	debugger
+async function Save_Transaction(db:any, nt:SaveNewTransactionServerT[]) {   return new Promise<any>(async (res, rej)=> {
 
 	nt.cat = db.collection("cats").doc(nt.cat)
 	nt.source = db.collection("sources").doc(nt.source)
@@ -345,21 +227,22 @@ async function Save_Transaction(db:any, nt:SaveNewTransactionServerT) {   return
 	nt.ts = Math.floor(Date.now() / 1000)
 
 	const docref = db.collection('transactions').doc()
-	await docref.set(nt).catch((err:any) => {
-		console.error("Error saving transaction:", err)
-		rej(err)
-		return
-	})
+	await docref.set(nt).catch((_err:any) => {   rej(null);return;   })
 
-	// Retrieve the complete document and return it
-	const savedDoc = await docref.get().catch((err:any) => {
-		console.error("Error retrieving saved transaction:", err)
-		rej(err)
-		return
-	})
-	
-	const completeTransaction = { id: docref.id, ...savedDoc.data() }
-    res({ok:true, id: docref.id, transaction: completeTransaction})
+    res({id:docref.id, ...nt})
+})}
+
+
+
+
+async function Ignore_Transaction(db:any, ynab_id:string) {   return new Promise<any>(async (res, rej)=> {
+
+	const ts = Math.floor(Date.now() / 1000)
+
+	const docref = db.collection('ignored_transactions').doc()
+	await docref.set({ts, ynab_id}).catch((_err:any) => {   rej(null);return;   })
+
+    res(1)
 })}
 
 
@@ -498,7 +381,7 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Get_YNAB_Raw_Transactions, Save_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transaction, Ignore_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
 
 export default Finance;
 
