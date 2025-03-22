@@ -219,17 +219,37 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
 
 
-async function Save_Transaction(db:any, nt:SaveNewTransactionServerT[]) {   return new Promise<any>(async (res, rej)=> {
+async function Save_Transactions(db:any, new_transactions:SaveNewTransactionServerT[]) {   return new Promise<any>(async (res, rej)=> {
+    
+    const batch = db.batch();
+    const now = Math.floor(Date.now() / 1000);
+    const savedTransactions = [];
 
-	nt.cat = db.collection("cats").doc(nt.cat)
-	nt.source = db.collection("sources").doc(nt.source)
-	nt.tags = nt.tags.map((m:string)=> db.collection("tags").doc(m))
-	nt.ts = Math.floor(Date.now() / 1000)
+    try {
+        for (const transaction of new_transactions) {
+            // Process references for each transaction
+            transaction.cat = db.collection("cats").doc(transaction.cat);
+            transaction.source = db.collection("sources").doc(transaction.source);
+            transaction.tags = transaction.tags.map((m:string) => db.collection("tags").doc(m));
+            transaction.ts = now;
 
-	const docref = db.collection('transactions').doc()
-	await docref.set(nt).catch((_err:any) => {   rej(null);return;   })
+            // Create a new document reference and add to batch
+            const docref = db.collection('transactions').doc();
+            batch.set(docref, transaction);
+            
+            // Store the transaction with its new ID for the response
+            savedTransactions.push({
+                id: docref.id,
+                ...transaction
+            });
+        }
 
-    res({id:docref.id, ...nt})
+        // Commit the batch
+        await batch.commit();
+        res(savedTransactions);
+    } catch (error) {
+        rej(null);
+    }
 })}
 
 
@@ -381,7 +401,7 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transaction, Ignore_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
 
 export default Finance;
 
