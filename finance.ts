@@ -286,6 +286,26 @@ async function Patch_Transaction(db:any, id:string, changed:any) {   return new 
 
 
 
+async function Update_Transaction_Tag(db:any, id:string, tag_id:string) {   return new Promise<any>(async (res, _rej)=> {
+
+	const now = Math.floor(Date.now() / 1000)
+	const d:any = {
+		tags: [db.collection("tags").doc(tag_id)],
+		ts: now
+	}
+
+	const docref = db.collection('transactions').doc(id)
+	await docref.set(d, {merge:true}).catch((_err:any)=> { res(null); return })
+
+	const r = await docref.get().catch((_err:any)=> { res(null); return })
+	const data = { id: r.id, ...r.data() }
+
+    res(data)
+})}
+
+
+
+
 async function Patch_Buckets(db:any, catupdates:{id:string,bucket:number}[], area_id:string|null, area_buckets_changed:any|null) {   return new Promise<any>(async (res, _rej)=> {
 
 	const now = Math.floor(Date.now() / 1000)
@@ -381,7 +401,7 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Update_Transaction_Tag, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot };
 
 export default Finance;
 

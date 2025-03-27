@@ -50,6 +50,7 @@ function Set_Routes() {
     SERVER_MAINS.app.post(  '/api/xen/finance/save_transaction',                              finance_save_transaction)
     SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                            finance_ignore_transaction)
     SERVER_MAINS.app.patch(  '/api/xen/finance/patch_transaction',                            finance_patch_transaction)
+    SERVER_MAINS.app.post(  '/api/xen/finance/update_transaction_tag',                        finance_update_transaction_tag)
     SERVER_MAINS.app.patch(  '/api/xen/finance/patch_buckets',                                finance_patch_buckets)
     SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          finance_update_merchant_name)
     SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                               firestore_save_quick_note)
@@ -131,6 +132,20 @@ async function finance_patch_transaction(req:any, res:any) {
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
     const r = await Finance.Patch_Transaction(SERVER_MAINS.db, req.body.id, req.body.changed)
+
+	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_DOC_PATCH, {path: "transactions/"+req.body.id, data: r})
+
+    res.status(200).send(JSON.stringify(r))
+}
+
+
+
+
+async function finance_update_transaction_tag(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const r = await Finance.Update_Transaction_Tag(SERVER_MAINS.db, req.body.id, req.body.tag_id)
 
 	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_DOC_PATCH, {path: "transactions/"+req.body.id, data: r})
 
