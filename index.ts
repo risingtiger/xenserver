@@ -2,7 +2,14 @@
 
 import { ServerMainsT, SSETriggersE } from './defs_server_symlink.js'
 import Finance from "./finance.js"
+import FinanceYnabTransactions from "./finance_ynabtransactions.js"
 import Admin_Firestore from "./admin/admin_firestore.js"
+
+
+const ynab_account_ids = {
+	holdem: "b0b3f2b2-5067-4f57-a248-15fa97a18cf5",
+	family: "dbb7396b-413f-40d7-9a3f-7c986e485233"
+}
 
 
 const SERVER_MAINS:ServerMainsT = { 
@@ -39,19 +46,17 @@ function Set_Routes() {
 
     SERVER_MAINS.app.get(  '/api/xen/finance/grab_em',                                        grab_em)       
     SERVER_MAINS.app.get(  '/api/xen/finance/ynab_sync_categories',                           finance_ynab_sync_categories)       
-    SERVER_MAINS.app.get(  '/api/xen/finance/get_ynab_raw_transactions',                      get_ynab_raw_transactions)
-    SERVER_MAINS.app.post(  '/api/xen/finance/save_transactions',                             finance_save_transactions)
+    SERVER_MAINS.app.get(  '/api/xen/finance/get_ynab_transactions',                          get_ynab_transactions)
+    SERVER_MAINS.app.post(  '/api/xen/finance/save_transaction',                              finance_save_transaction)
+    SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                            finance_ignore_transaction)
     SERVER_MAINS.app.patch(  '/api/xen/finance/patch_transaction',                            finance_patch_transaction)
     SERVER_MAINS.app.patch(  '/api/xen/finance/patch_buckets',                                finance_patch_buckets)
-    SERVER_MAINS.app.patch(  '/api/xen/finance/patch_area_bucket',                            finance_patch_area_bucket)
     SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          finance_update_merchant_name)
-    SERVER_MAINS.app.post(  '/api/xen/finance/save_month_snapshots',                          finance_save_month_snapshots)
     SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                               firestore_save_quick_note)
     SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                             finance_add_monthsnapshot)
 
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_update',                            admin_firestore_misc_update)
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_get',                               admin_firestore_misc_get)
-
 }
 
 
@@ -63,7 +68,8 @@ async function grab_em(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await Finance.Grab_Em(SERVER_MAINS.db, SERVER_MAINS.firestore)
+    const r = await Finance.Grab_Em(SERVER_MAINS.db, ynab_account_ids)
+	if (r === null) { res.status(200).send(JSON.stringify({ok:false})); return; }
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -82,26 +88,39 @@ async function finance_ynab_sync_categories(req:any, res:any) {
 
 
 
-async function get_ynab_raw_transactions(req:any, res:any) {
+async function get_ynab_transactions(req:any, res:any) {
     
-	console.log(req.headers)
-
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const response = await Finance.Get_YNAB_Raw_Transactions(SERVER_MAINS.db)
+    const response = await FinanceYnabTransactions.Get(SERVER_MAINS.db, ynab_account_ids)
     res.status(200).send(JSON.stringify(response))
 }
 
 
 
 
-async function finance_save_transactions(req:any, res:any) {
+async function finance_save_transaction(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await Finance.Save_Transactions(SERVER_MAINS.db, SERVER_MAINS.sse, req.body)
+    const r = await Finance.Save_Transactions(SERVER_MAINS.db, req.body)
+	if (r === null) { res.status(200).send(JSON.stringify({ok:false})); return; }
 
-    res.status(200).send(JSON.stringify(r))
+    SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_COLLECTION, { paths:["transactions"] } )
+
+    res.status(200).send(JSON.stringify({ok:true}))
+}
+
+
+
+
+async function finance_ignore_transaction(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    await Finance.Ignore_Transaction(SERVER_MAINS.db, req.body.ynab_id)
+
+    res.status(200).send(JSON.stringify({ok:true}))
 }
 
 
@@ -113,7 +132,7 @@ async function finance_patch_transaction(req:any, res:any) {
 
     const r = await Finance.Patch_Transaction(SERVER_MAINS.db, req.body.id, req.body.changed)
 
-	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["transactions/"+req.body.id]})
+	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_DOC_PATCH, {path: "transactions/"+req.body.id, data: r})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -127,21 +146,7 @@ async function finance_patch_buckets(req:any, res:any) {
 
     const r = await Finance.Patch_Buckets(SERVER_MAINS.db, req.body.catupdates, req.body.area_id, req.body.area_buckets_changed)
 
-	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["cats","areas"]})
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
-
-
-async function finance_patch_area_bucket(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const r = await Finance.Patch_Area_Bucket(SERVER_MAINS.db, req.body.id, req.body.changed)
-
-	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["areas"]})
+	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_COLLECTION, {paths: ["cats","areas"]})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -155,19 +160,7 @@ async function finance_update_merchant_name(req:any, res:any) {
 
     const r = await Finance.Update_Merchant_Name(SERVER_MAINS.db, req.body.newname, req.body.oldname)
 
-	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE, {paths: ["transactions"]})
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
-
-
-async function finance_save_month_snapshots(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const r = await Finance.Save_Month_Snapshots(SERVER_MAINS.db, req.body)
+	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_COLLECTION, {paths: ["transactions"]})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -190,6 +183,8 @@ async function finance_add_monthsnapshot(req:any, res:any) {
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
     const r = await Finance.Add_MonthSnapshot(SERVER_MAINS.db, req.body.monthSnapshot)
+
+	SERVER_MAINS.sse.TriggerEvent(SSETriggersE.FIRESTORE_COLLECTION, {paths: ["monthsnapshots"]})
 
     res.status(200).send(JSON.stringify(r))
 }

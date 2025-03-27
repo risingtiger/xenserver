@@ -19,24 +19,15 @@ const payees_to_skip = [
 
 
 
-async function Grab_Em(_db:any, _firestore:any) {   return new Promise<any>(async (res, _rej)=> {
+async function Grab_Em(_db:any, accountids:{[key:string]:string}) {   return new Promise<any>(async (res, _rej)=> {
 
 	//@ts-ignore
     const token = process.env.XEN_YNAB
 
     let promises:any[] = [
 
-        //Firestore.Retrieve(db, ["areas", "cats", "sources", "tags", "transactions", "monthsnapshots"]),
-
-        fetch(`https://api.ynab.com/v1/budgets/${YNAB_HOLDEM_ACCOUNT_ID}/accounts`, {
-            method: 'GET',
-            headers: { "Authorization": `Bearer ${token}` }
-        }),
-
-        fetch(`https://api.ynab.com/v1/budgets/${YNAB_FAMILY_ACCOUNT_ID}/accounts`, {
-            method: 'GET',
-            headers: { "Authorization": `Bearer ${token}` }
-        })
+        fetch(`https://api.ynab.com/v1/budgets/${accountids.holdem}/accounts`, { method: 'GET', headers: { "Authorization": `Bearer ${token}` }}),
+        fetch(`https://api.ynab.com/v1/budgets/${accountids.family}/accounts`, {method: 'GET',  headers: { "Authorization": `Bearer ${token}` }})
     ]
 
     let r = await Promise.all(promises)
@@ -219,37 +210,26 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
 
 
-async function Save_Transactions(db:any, new_transactions:SaveNewTransactionServerT[]) {   return new Promise<any>(async (res, rej)=> {
+async function Save_Transactions(db:any, new_transactions:SaveNewTransactionServerT[]) {   return new Promise<number|null>(async (res, _rej)=> {
     
     const batch = db.batch();
     const now = Math.floor(Date.now() / 1000);
-    const savedTransactions = [];
+    const savedTransactions:{[key:string]:any}[] = [];
 
-    try {
-        for (const transaction of new_transactions) {
-            // Process references for each transaction
-            transaction.cat = db.collection("cats").doc(transaction.cat);
-            transaction.source = db.collection("sources").doc(transaction.source);
-            transaction.tags = transaction.tags.map((m:string) => db.collection("tags").doc(m));
-            transaction.ts = now;
+	for (const transaction of new_transactions) {
+		transaction.cat = db.collection("cats").doc(transaction.cat);
+		transaction.source = db.collection("sources").doc(transaction.source);
+		transaction.tags = transaction.tags.map((m:string) => db.collection("tags").doc(m));
+		transaction.ts = now;
 
-            // Create a new document reference and add to batch
-            const docref = db.collection('transactions').doc();
-            batch.set(docref, transaction);
-            
-            // Store the transaction with its new ID for the response
-            savedTransactions.push({
-                id: docref.id,
-                ...transaction
-            });
-        }
+		const docref = db.collection('transactions').doc();
+		batch.set(docref, transaction);
+		
+		savedTransactions.push({ id: docref.id, ...transaction });
+	}
 
-        // Commit the batch
-        await batch.commit();
-        res(savedTransactions);
-    } catch (error) {
-        rej(null);
-    }
+	const r = await batch.commit().catch(()=> null)
+	res(r)
 })}
 
 
