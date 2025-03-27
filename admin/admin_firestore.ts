@@ -2,7 +2,7 @@
 
 //type str = string; //type int = number; type bool = boolean;
 
-//import {FieldValue} from "@google-cloud/firestore"
+import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
 
 
@@ -23,7 +23,8 @@ const Misc_Update = async (db: any) => {
         for (const t of items) {
 			if (!t.transacted_ts) {
 				const updateobj = {
-					cat: db.doc('cats/deecbb5f-403a-4277-a06b-223ac38623d2')
+					cat: db.doc('cats/deecbb5f-403a-4277-a06b-223ac38623d2'),
+					transacted_ts: FieldValue.delete()
 				}
 				batch.update(collection.doc(t.id), updateobj);
 			}
