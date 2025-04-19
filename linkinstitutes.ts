@@ -48,23 +48,38 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 
 
 const PlaidExchangePublicToken = (db:any, public_token:string) => new Promise<any>(async (res, _rej)=> {
+    try {
+        const response = await plaidClient.itemPublicTokenExchange({ public_token });
+        const accessToken = response.data.access_token;
+        const itemId = response.data.item_id;
 
-    const response    = await plaidClient.itemPublicTokenExchange({ public_token, });
-    const accessToken = response.data.access_token;
-    const itemId      = response.data.item_id;
+        // Store in Firestore for the hardcoded user
+        const userEmail = 'accounts@risingtiger.com';
+        const userRef = db.collection('users').doc(userEmail);
+        const plaidData = {
+            access_token: accessToken,
+            item_id: itemId,
+            created_at: Math.floor(Date.now() / 1000)
+        };
 
-    // Store accessToken securely (e.g., in a database) for future use
-    res.json({ access_token: accessToken, item_id: itemId });
-	if (r.error)    throw new Error(r.error);
+        // Store in a subcollection for the user
+        await userRef.collection('plaid_accounts').doc(itemId).set(plaidData);
 
-
-    res({ link_token:r.data.link_token })
+        // Return success response
+        res({ success: true, item_id: itemId });
+    } catch (error: any) {
+        console.error("Error in PlaidExchangePublicToken:", error);
+        res({ success: false, error: error.message });
+    }
 })
 
 
 
 
-const LinkInstitute = { PlaidCreateLinkToken, PlaidExchangePublicToken };
+const LinkInstitute = { 
+    PlaidCreateLinkToken, 
+    PlaidExchangePublicToken 
+};
 
 export default LinkInstitute;
 
