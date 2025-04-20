@@ -14,7 +14,7 @@ const configuration = new Configuration({
   baseOptions: {
     headers: {
       'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-      'PLAID-SECRET': process.env.PLAID_SECRET,
+      'PLAID-SECRET': (process.env.PLAID_ENV === 'sandbox') ? process.env.PLAID_SECRET_SANDBOX : process.env.PLAID_SECRET_PRODUCTION
     },
   },
 });
@@ -31,7 +31,7 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 		user: {
 			client_user_id: 'unique_user_id_' + Date.now(), 
 		},
-		client_name: 'My Plaid App',
+		client_name: 'Xen Finance',
 		products: ['auth', 'transactions'], 
 		language: 'en',
 		country_codes: ['US'],
@@ -48,29 +48,36 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 
 
 const PlaidExchangePublicToken = (db:any, public_token:string) => new Promise<any>(async (res, _rej)=> {
-    try {
-        const response = await plaidClient.itemPublicTokenExchange({ public_token });
-        const accessToken = response.data.access_token;
-        const itemId = response.data.item_id;
 
-        // Store in Firestore for the hardcoded user
-        const userEmail = 'accounts@risingtiger.com';
-        const userRef = db.collection('users').doc(userEmail);
-        const plaidData = {
-            access_token: accessToken,
-            item_id: itemId,
-            created_at: Math.floor(Date.now() / 1000)
-        };
+	const r = await plaidClient.itemPublicTokenExchange({ public_token }).catch((error:any) => {error} )
+	if (r.error) throw new Error(r.error);
 
-        // Store in a subcollection for the user
-        await userRef.collection('plaid_accounts').doc(itemId).set(plaidData);
 
-        // Return success response
-        res({ success: true, item_id: itemId });
-    } catch (error: any) {
-        console.error("Error in PlaidExchangePublicToken:", error);
-        res({ success: false, error: error.message });
-    }
+	const accessToken = r.data.access_token;
+	const itemId = r.data.item_id;
+
+	const userEmail = 'accounts@risingtiger.com';
+	const userRef = db.collection('users').doc(userEmail);
+	const plaidData = {
+		access_token: accessToken,
+		item_id: itemId,
+		ts: Math.floor(Date.now() / 1000)
+	};
+
+	await userRef.collection('plaid').doc(itemId).set(plaidData);
+
+	res({ success: true, item_id: itemId });
+})
+
+
+
+
+const PlaidGetBalances = (_db:any, access_token:string) => new Promise<any>(async (res, _rej)=> {
+
+	const r = await plaidClient.accountsBalanceGet({access_token}).catch((error:any) => {error} )
+	if (r.error) throw new Error(r.error);
+
+	res(r)
 })
 
 
@@ -78,7 +85,8 @@ const PlaidExchangePublicToken = (db:any, public_token:string) => new Promise<an
 
 const LinkInstitute = { 
     PlaidCreateLinkToken, 
-    PlaidExchangePublicToken 
+    PlaidExchangePublicToken,
+	PlaidGetBalances
 };
 
 export default LinkInstitute;
