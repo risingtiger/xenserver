@@ -35,7 +35,10 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 		client_name: 'Xen Finance',
 		products: ['auth', 'transactions'], 
 		language: 'en',
-		country_codes: ['US'],
+		country_codes: ['US'], // Ensure 'US' is enabled in Plaid Dashboard
+        // Add redirect_uri and webhook from environment variables
+        redirect_uri: process.env.PLAID_REDIRECT_URI, // Must be configured in Plaid Dashboard
+        webhook: process.env.PLAID_WEBHOOK_URL,       // Must be configured in Plaid Dashboard
     };
 
     try {
