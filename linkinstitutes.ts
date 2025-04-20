@@ -27,6 +27,7 @@ const plaidClient = new PlaidApi(configuration);
 
 const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 
+	debugger
     const request = {
 		user: {
 			client_user_id: 'unique_user_id_' + Date.now(), 
@@ -49,7 +50,7 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
         }
         res({ link_token: response.data.link_token });
     } catch (error) {
-        console.error("Error creating Plaid link token:", error);
+		console.log(JSON.stringify(error));
         _rej(error); // Reject the promise with the caught error
     }
 })
