@@ -46,14 +46,26 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
         // Check if the response itself indicates an API-level error, though typically the client throws for transport/auth errors.
         // This check might be redundant depending on the client library's behavior for API errors vs. network/auth errors.
         // @ts-ignore - Plaid client types might not explicitly show 'error' on success response, but checking defensively.
-        if (response.error) { 
+        if (response.error) {
             console.error("Plaid API Error:", response.error);
             _rej(new Error('Plaid API returned an error.')); // Reject the promise
-            return; 
+            return;
         }
         res({ link_token: response.data.link_token });
-    } catch (error) {
-		console.log(JSON.stringify(error));
+    } catch (error: any) { // Add type 'any' for better property access checking
+        if (error.response) {
+            // Axios error with a response from the server
+            console.error("Plaid API Error Response:", JSON.stringify(error.response.data));
+            console.error("Status Code:", error.response.status);
+        } else if (error.request) {
+            // The request was made but no response was received
+            console.error("Plaid API No Response:", error.request);
+        } else {
+            // Something happened in setting up the request that triggered an Error
+            console.error('Error setting up Plaid request:', error.message);
+        }
+        // Log the original stringified error as well for context if needed
+        console.error("Full Axios Error object:", JSON.stringify(error));
         _rej(error); // Reject the promise with the caught error
     }
 })
