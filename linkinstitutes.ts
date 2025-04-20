@@ -37,11 +37,21 @@ const PlaidCreateLinkToken = () => new Promise<any>(async (res, _rej)=> {
 		country_codes: ['US'],
     };
 
-    const r   = await plaidClient.linkTokenCreate(request).catch((error:any) => {error} )
-	if (r.error)    throw new Error(r.error);
-
-
-    res({ link_token:r.data.link_token })
+    try {
+        const response = await plaidClient.linkTokenCreate(request);
+        // Check if the response itself indicates an API-level error, though typically the client throws for transport/auth errors.
+        // This check might be redundant depending on the client library's behavior for API errors vs. network/auth errors.
+        // @ts-ignore - Plaid client types might not explicitly show 'error' on success response, but checking defensively.
+        if (response.error) { 
+            console.error("Plaid API Error:", response.error);
+            _rej(new Error('Plaid API returned an error.')); // Reject the promise
+            return; 
+        }
+        res({ link_token: response.data.link_token });
+    } catch (error) {
+        console.error("Error creating Plaid link token:", error);
+        _rej(error); // Reject the promise with the caught error
+    }
 })
 
 
