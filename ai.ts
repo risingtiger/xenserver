@@ -29,7 +29,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 	`;
 
 	const r = await gemini.models.generateContent({
-		model: 'gemini-2.0-flash-001',
+		model: 'gemini-2.5-flash',
 		contents: instructions + "\n\n\n" + apple_data,
 	})
 
