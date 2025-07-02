@@ -243,13 +243,13 @@ async function Save_Transactions(db:any, new_transactions:( SaveNewTransactionSe
 
 
 
-async function Ignore_Transaction(db:any, ynab_id:string) {   return new Promise<any>(async (res, rej)=> {
+async function Ignore_Transaction(db:any, sheets_id:string) {   return new Promise<any>(async (res, rej)=> {
 
 	const ts = Math.floor(Date.now() / 1000)
 
 	try {
 		const docref = db.collection('ignored_transactions').doc()
-		await docref.set({ts, ynab_id}).catch((_err:any) => {   rej(null);return;   })
+		await docref.set({ts, sheets_id})
 	}
 	catch {
 		rej(null)
