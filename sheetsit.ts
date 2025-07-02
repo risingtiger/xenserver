@@ -21,8 +21,6 @@ const spreadsheetId = '1YHRpv9RczYKqKuvT9zsbq7zIDkozjRpYDDEHxvmQAjw';
 
 const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async (res, rej)=> {
 
-	debugger
-
 	let response:any = {}
 	
 	try   {  response = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N500' }) } 
@@ -36,47 +34,28 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 		
 		if (!row || row.length < 13) continue;
 		
-
-		/*
-		export type SheetsTransactionT = {
-			transaction_id: string,
-			preset_area_id: string | null,
-			preset_cat_name: string | null,
-			date: number, // Unix timestamp in seconds
-			amount: number, // Postive amount in two decimal places
-			merchant: string, // Shorter merchant name
-			notes: string,
-			source_id: string|null,
-			tags: string[],
-		}
-
-		Header columns: get_sheets_transactions	Date	Description	Category	Amount	Account	Account #	Institution	Currency	Channel	Sheetsync Category	Sheetsync Subcategory	Full Description	Transaction ID
-		*/
-		
-		// Parse date from column 1 (Date)
 		const date_str = row[1] || '';
 		const date_obj = new Date(date_str);
 		const date_timestamp = Math.floor(date_obj.getTime() / 1000);
 		
-		// Parse amount from column 4 (Amount) - remove currency symbols and convert to positive
 		const amount_str = row[4] || '0';
 		const amount = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
 		
-		// Get account name and map to source_id
 		const account_name = row[5] || '';
 		const account_mapping = ACCOUNT_ID_MAP[account_name];
 		const source_id = account_mapping ? account_mapping[0] : null;
+
+		if (!source_id) {   continue;   }
 		
 		const transaction: SheetsTransactionT = {
-			transaction_id: row[13] || '', // Transaction ID column
-			preset_area_id: null, // Not available in sheets data
-			preset_cat_name: row[3] || null, // Category column
+			sheets_id: row[13],
+			preset_cat_name: row[3] || null, 
 			date: date_timestamp,
 			amount: amount,
-			merchant: row[2] || '', // Description column (shorter merchant name)
-			notes: row[12] || '', // Full Description column
+			merchant: row[2] || '', 
+			merchant_long: row[12] || '', 
+			notes: '', 
 			source_id: source_id,
-			tags: [], // Not available in sheets data
 		};
 		
 		transactions.push(transaction);
