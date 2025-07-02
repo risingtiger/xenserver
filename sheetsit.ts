@@ -36,24 +36,23 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 		
 		if (!row || row.length < 13) continue;
 		
-		const accountName = row[4];
-		const accountIds = ACCOUNT_ID_MAP[accountName];
+
+		/*
+		export type SheetsTransactionT = {
+			transaction_id: string,
+			preset_area_id: string | null,
+			preset_cat_name: string | null,
+			date: number, // Unix timestamp in seconds
+			amount: number, // Postive amount in two decimal places
+			merchant: string, // Shorter merchant name
+			notes: string,
+			source_id: string|null,
+			tags: string[],
+		}
+
+		Header columns: get_sheets_transactions	Date	Description	Category	Amount	Account	Account #	Institution	Currency	Channel	Sheetsync Category	Sheetsync Subcategory	Full Description	Transaction ID
+		*/
 		
-		if (!accountIds) continue;
-		
-		const transaction: SheetsTransactionT = {
-			transaction_id: row[12] || '',
-			preset_area_id: '',
-			preset_cat_name: '',
-			date: new Date(row[0]).getTime(),
-			amount: parseFloat(row[3]) || 0,
-			merchant: row[1] || '',
-			notes: row[11] || '',
-			source_id: accountIds[0],
-			tags: []
-		};
-		
-		transactions.push(transaction);
 	}
 
 	res(transactions);
