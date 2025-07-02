@@ -12,6 +12,7 @@ const Misc_Update = async (db: any) => {
 
     return new Promise<any>(async (res, _rej)=> {
 
+		debugger
         const collection = db.collection("transactions")
         //const catRef = db.doc('cats/72dda9c4-27f9-4459-853c-a00631795909')
         //const snapshot = await collection.where('cat', '==', catRef).get()
@@ -21,9 +22,8 @@ const Misc_Update = async (db: any) => {
         let batch        = db.batch()
 
         for (const t of items) {
-			if (!t.transacted_ts) {
+			if (t.transacted_ts) {
 				const updateobj = {
-					cat: db.doc('cats/deecbb5f-403a-4277-a06b-223ac38623d2'),
 					transacted_ts: FieldValue.delete()
 				}
 				batch.update(collection.doc(t.id), updateobj);

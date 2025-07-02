@@ -1,3 +1,6 @@
 .vscode
 
 .DS_Store
+defs_server_symlink.ts
+.aider*
+.env
