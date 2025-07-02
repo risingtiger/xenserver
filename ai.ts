@@ -17,13 +17,19 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 	const now = new Date().toISOString().split('T')[0] + 'T' + new Date().toISOString().split('T')[1].substring(0, 8)
 
 	let quick_notes: any[] = []
+	let existing_transactions: any[] = []
 	
 	try {
-		const quick_notes_promise = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
-		const quick_notes_snap = await quick_notes_promise
+		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+		const [quick_notes_snap, transactions_snap] = await Promise.all([
+			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
+			db.collection("transactions").where("ts", ">=", thirty_days_ago).get()
+		]);
+		
 		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		existing_transactions = transactions_snap.docs.map((doc: any) => doc.data());
 	} catch {
-		// Continue without quick notes if fetch fails
+		// Continue without quick notes and transactions if fetch fails
 	}
 
 	const instructions = `
