@@ -91,24 +91,19 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 
 	if (newtransactions.length === 0) { res([]); return; }
 
-	const thirtydaysago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
-	const collection = db.collection("transactions");
-	const snapshot = await collection.where("ts", ">=", thirtydaysago).get();
-	const existingtransactions = snapshot.docs.map((doc: any) => doc.data());
-
-	const filteredtransactions = newtransactions.filter(newTx => {
-		return !existingtransactions.some(( existingTx:any ) => {
-			const amountMatches = Math.abs(existingTx.amount - newTx.amount) < 0.01;
-			const dateMatches = existingTx.date === newTx.date;
-			return amountMatches && dateMatches;
+	const filtered_transactions = newtransactions.filter(new_tx => {
+		return !existing_transactions.some((existing_tx: any) => {
+			const amount_matches = Math.abs(existing_tx.amount - new_tx.amount) < 0.01;
+			const date_matches = existing_tx.date === new_tx.date;
+			return amount_matches && date_matches;
 		});
-	}).sort((a:any, b:any) => { 
+	}).sort((a: any, b: any) => { 
 		if (a.date < b.date) return -1;
 		if (a.date > b.date) return 1;
 		return 0;
 	});
 
-	res(filteredtransactions) 
+	res(filtered_transactions) 
 
 
 
