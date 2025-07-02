@@ -18,20 +18,8 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 
 	let quick_notes: any[] = []
 	let existing_transactions: any[] = []
+	let r: any = null
 	
-	try {
-		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
-		const [quick_notes_snap, transactions_snap] = await Promise.all([
-			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
-			db.collection("transactions").where("ts", ">=", thirty_days_ago).get()
-		]);
-		
-		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
-		existing_transactions = transactions_snap.docs.map((doc: any) => doc.data());
-	} catch {
-		// Continue without quick notes and transactions if fetch fails
-	}
-
 	const instructions = `
 		## Instructions
 		- The following is text of Apple Card transactions. 
@@ -43,11 +31,26 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
 		- ONLY return the CSV data. Do not include a CSV header..
 	`;
-
-	const r = await gemini.models.generateContent({
-		model: 'gemini-2.5-flash-lite-preview-06-17',
-		contents: instructions + "\n\n\n" + apple_data,
-	})
+	
+	try {
+		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+		const [quick_notes_snap, transactions_snap, gemini_response] = await Promise.all([
+			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
+			db.collection("transactions").where("ts", ">=", thirty_days_ago).get(),
+			gemini.models.generateContent({
+				model: 'gemini-2.5-flash-lite-preview-06-17',
+				contents: instructions + "\n\n\n" + apple_data,
+			})
+		]);
+		
+		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		existing_transactions = transactions_snap.docs.map((doc: any) => doc.data());
+		r = gemini_response;
+	} catch {
+		// Continue without quick notes and transactions if fetch fails
+		res([]);
+		return;
+	}
 
 	if (r.text.length < 24) { res([]); return; }
 
