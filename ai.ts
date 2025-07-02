@@ -11,10 +11,20 @@ import { str } from './defs_server_symlink.js'
 
 
 
-type ParseAppleReturnT = { amount:number, date: number, merchant: string }
+type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
 const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
 	const now = new Date().toISOString().split('T')[0] + 'T' + new Date().toISOString().split('T')[1].substring(0, 8)
+
+	let quick_notes: any[] = []
+	
+	try {
+		const quick_notes_promise = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
+		const quick_notes_snap = await quick_notes_promise
+		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+	} catch {
+		// Continue without quick notes if fetch fails
+	}
 
 	const instructions = `
 		## Instructions
@@ -75,9 +85,21 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 			amount: amount,
 			date: timestamp,
 			merchant: merchant,
+			notes: '',
 		}
 		
+		handle_quick_notes(transaction, quick_notes);
+		
 		newtransactions.push(transaction);
+	}
+
+	function handle_quick_notes(apple_t: any, quick_notes: any[]) {
+		quick_notes.forEach(qn => {
+			const six_days = 518400; // 6 days in seconds
+			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
+				apple_t.notes = qn.notes;
+			}
+		});
 	}
 
 	if (newtransactions.length === 0) { res([]); return; }
