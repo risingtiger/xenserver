@@ -171,7 +171,7 @@ async function get_sheets_transactions(req:any, res:any) {
     
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const response = await SheetsIt.Get_Latest_Transactions(SERVER_MAINS.sheets)
+    const response = await SheetsIt.Get_Latest_Transactions(SERVER_MAINS.db, SERVER_MAINS.sheets)
 	if (response === null) { res.status(400).send(); return; }
     res.status(200).send(JSON.stringify(response))
 }

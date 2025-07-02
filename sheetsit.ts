@@ -19,7 +19,33 @@ const spreadsheetId = '1YHRpv9RczYKqKuvT9zsbq7zIDkozjRpYDDEHxvmQAjw';
 
 
 
-const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async (res, rej)=> {
+const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null>(async (res, rej)=> {
+
+	let ignored_transaction_sheets_ids: string[] = []
+	let existing_transactions: any[] = []
+	let quick_notes: any[] = []
+
+	try {
+		const ignored_transactions_promise = db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get()
+		const existing_transactions_promise = db.collection("transactions").orderBy("date", "desc").limit(400).get()
+		const quick_notes_promise           = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
+		
+		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap] = await Promise.all([
+			ignored_transactions_promise, 
+			existing_transactions_promise, 
+			quick_notes_promise
+		]);
+		
+		ignored_transaction_sheets_ids = ignored_transactions_snap.docs
+			.map((m: any) => m.data().sheets_id)
+			.filter((id:any) => id);
+		existing_transactions = existing_transactions_snap.docs.map((m: any) => m.data());
+		quick_notes           = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+
+	} catch {
+		rej(); return;
+	}
+
 
 	let response:any = {}
 	
@@ -32,7 +58,15 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 	for(let i = 0; i < rows.length; i++) {
 		const row = rows[i];
 		
-		if (!row || row.length < 13) continue;
+		if (!row || row.length < 14 || !row[13]) continue;
+		
+		const sheets_id = row[13];
+		if (existing_transactions.find((t: any) => t.sheets_id === sheets_id)) {
+			continue;
+		}
+		if (ignored_transaction_sheets_ids.includes(sheets_id)) {
+			continue;
+		}
 		
 		const date_str = row[1] || '';
 		const date_obj = new Date(date_str);
@@ -48,7 +82,7 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 		if (!source_id) {   continue;   }
 		
 		const transaction: SheetsTransactionT = {
-			sheets_id: row[13],
+			sheets_id: sheets_id,
 			preset_cat_name: row[3] || null, 
 			date: date_timestamp,
 			amount: amount,
@@ -57,8 +91,19 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 			notes: '', 
 			source_id: source_id,
 		};
+
+		handle_quick_notes(transaction, quick_notes);
 		
 		transactions.push(transaction);
+	}
+
+	function handle_quick_notes(sheets_t: SheetsTransactionT, quick_notes: any[]) {
+		quick_notes.forEach(qn => {
+			const six_days = 518400; // 6 days in seconds
+			if ((qn.ts > sheets_t.date - six_days && qn.ts < sheets_t.date + six_days) && (qn.amount === sheets_t.amount)) {
+				sheets_t.notes = qn.notes;
+			}
+		});
 	}
 
 	res(transactions);
