@@ -248,8 +248,7 @@ async function Ignore_Transaction(db:any, sheets_id:string) {   return new Promi
 	const ts = Math.floor(Date.now() / 1000)
 
 	try {
-		const docref = db.collection('ignored_transactions').doc()
-		await docref.set({ts, sheets_id})
+		await db.collection('ignored_transactions').add({ts, sheets_id})
 	}
 	catch {
 		rej(null)
