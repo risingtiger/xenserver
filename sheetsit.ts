@@ -53,6 +53,33 @@ const Get_Latest_Transactions = (sheets:any) => new Promise<any[] | null>(async 
 		Header columns: get_sheets_transactions	Date	Description	Category	Amount	Account	Account #	Institution	Currency	Channel	Sheetsync Category	Sheetsync Subcategory	Full Description	Transaction ID
 		*/
 		
+		// Parse date from column 1 (Date)
+		const date_str = row[1] || '';
+		const date_obj = new Date(date_str);
+		const date_timestamp = Math.floor(date_obj.getTime() / 1000);
+		
+		// Parse amount from column 4 (Amount) - remove currency symbols and convert to positive
+		const amount_str = row[4] || '0';
+		const amount = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
+		
+		// Get account name and map to source_id
+		const account_name = row[5] || '';
+		const account_mapping = ACCOUNT_ID_MAP[account_name];
+		const source_id = account_mapping ? account_mapping[0] : null;
+		
+		const transaction: SheetsTransactionT = {
+			transaction_id: row[13] || '', // Transaction ID column
+			preset_area_id: null, // Not available in sheets data
+			preset_cat_name: row[3] || null, // Category column
+			date: date_timestamp,
+			amount: amount,
+			merchant: row[2] || '', // Description column (shorter merchant name)
+			notes: row[12] || '', // Full Description column
+			source_id: source_id,
+			tags: [], // Not available in sheets data
+		};
+		
+		transactions.push(transaction);
 	}
 
 	res(transactions);
