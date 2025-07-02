@@ -35,30 +35,19 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		- All time is in UTC
 		- now is ${now} UTC
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
-		- ONLY return the CSV data, nothing else.
+		- ONLY return the CSV data. Do not include a CSV header..
 	`;
 
 	const r = await gemini.models.generateContent({
-		model: 'gemini-2.5-flash',
+		model: 'gemini-2.5-flash-lite-preview-06-17',
 		contents: instructions + "\n\n\n" + apple_data,
 	})
 
-	if (!r.text.startsWith('date')) {
-		const pos = r.text.indexOf('date')
-		if (pos > -1) {
-			r.text = r.text.substring(pos)
-		} else {
-			r.text = 'date,merchant,amount\n' + r.text
-		}
-	}
-
-
-	if (r.ok && !r.ok)          { res([]); return; }
 	if (r.text.length < 24) { res([]); return; }
 
 	const csvlines = r.text.trim().split('\n');
 
-	if (csvlines.length < 2)    { res([]); return; }
+	if (!csvlines.length)    { res([]); return; }
 
 	const newtransactions:any[] = [];
 	
@@ -93,14 +82,6 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		newtransactions.push(transaction);
 	}
 
-	function handle_quick_notes(apple_t: any, quick_notes: any[]) {
-		quick_notes.forEach(qn => {
-			const six_days = 518400; // 6 days in seconds
-			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
-				apple_t.notes = qn.notes;
-			}
-		});
-	}
 
 	if (newtransactions.length === 0) { res([]); return; }
 
@@ -122,6 +103,17 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 	});
 
 	res(filteredtransactions) 
+
+
+
+	function handle_quick_notes(apple_t: any, quick_notes: any[]) {
+		quick_notes.forEach(qn => {
+			const six_days = 518400; // 6 days in seconds
+			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
+				apple_t.notes = qn.notes;
+			}
+		});
+	}
 })
 
 
