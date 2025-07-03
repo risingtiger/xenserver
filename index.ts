@@ -98,6 +98,14 @@ async function ai_parse_apple(req:any, res:any) {
 
 debugger
 	const image_screenshot = req.file
+	console.log('image_screenshot object:', image_screenshot)
+	
+	if (!image_screenshot || !image_screenshot.buffer) {
+		console.error('No buffer found in image_screenshot')
+		res.status(400).send('No file buffer found')
+		return
+	}
+	
 	const image_base64 = image_screenshot.buffer.toString('base64')
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
