@@ -102,6 +102,56 @@ Date,Description,Daily Cash,Amount
 
 
 type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
+
+function parse_date_to_iso(date_str: string, localnow: string, timezone_offset: number): string {
+	const now = new Date(localnow);
+	const timezone_offset_str = (timezone_offset >= 0 ? '+' : '-') + 
+		Math.floor(Math.abs(timezone_offset)).toString().padStart(2, '0') + ':00';
+	
+	// Handle relative dates
+	if (date_str.toLowerCase().includes('yesterday')) {
+		const yesterday = new Date(now);
+		yesterday.setDate(yesterday.getDate() - 1);
+		yesterday.setHours(0, 0, 0, 0);
+		return yesterday.toISOString().slice(0, 19) + timezone_offset_str;
+	}
+	
+	// Handle day names (Monday, Tuesday, etc.)
+	const day_names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+	const day_index = day_names.findIndex(day => date_str.toLowerCase().includes(day));
+	if (day_index !== -1) {
+		const target_date = new Date(now);
+		const current_day = target_date.getDay();
+		const days_back = (current_day - day_index + 7) % 7;
+		if (days_back === 0) days_back = 7; // If it's the same day, assume last week
+		target_date.setDate(target_date.getDate() - days_back);
+		target_date.setHours(0, 0, 0, 0);
+		return target_date.toISOString().slice(0, 19) + timezone_offset_str;
+	}
+	
+	// Handle hourly amounts (e.g., "12 hours ago", "3 hours ago")
+	const hour_match = date_str.match(/(\d+)\s*hours?\s*ago/i);
+	if (hour_match) {
+		const today = new Date(now);
+		today.setHours(0, 0, 0, 0);
+		return today.toISOString().slice(0, 19) + timezone_offset_str;
+	}
+	
+	// Handle date formats like M/D/YY or M/D/YYYY
+	const date_match = date_str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+	if (date_match) {
+		const [, month, day, year] = date_match;
+		const full_year = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
+		const parsed_date = new Date(full_year, parseInt(month) - 1, parseInt(day), 0, 0, 0, 0);
+		return parsed_date.toISOString().slice(0, 19) + timezone_offset_str;
+	}
+	
+	// Default: return today at midnight
+	const today = new Date(now);
+	today.setHours(0, 0, 0, 0);
+	return today.toISOString().slice(0, 19) + timezone_offset_str;
+}
+
 const ParseAppleScreenShot = (db:any, gemini:any, image_base64:any, localnow:string, timezone_offset:number) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
 	let quick_notes: any[] = []
@@ -115,6 +165,10 @@ const ParseAppleScreenShot = (db:any, gemini:any, image_base64:any, localnow:str
 		- Parse the text of each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
 		- Date is in either date format of M/D/YY or relative to now. 
 		- examples of relative specifications are: Friday, Yesterday, 12 hours ago, etc, etc.
+		- Convert all dates to ISO 8601 format of YYYY-MM-DDTHH:MM:SS+TZ:00, e.g. 2025-09-12T00:00:00-07:00. 
+		- The local date and time now is ${localnow}. Compare all dates to this.
+		- Set all times to 00:00:00 (midnight) local time.
+		- Include the timezone offset ${timezone_offset >= 0 ? '+' : ''}${Math.floor(timezone_offset).toString().padStart(2, '0')}:00 in the formatted datetime.
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
 		- ONLY return the CSV data. Do not include a CSV header.
 	`;
@@ -182,17 +236,16 @@ const ParseAppleScreenShot = (db:any, gemini:any, image_base64:any, localnow:str
 		const parts = line.split(',');
 		if (parts.length !== 3) continue;
 
-		const timezone_offset_str = (timezone_offset >= 0 ? '+' : '-') + 
-			Math.floor(Math.abs(timezone_offset)).toString().padStart(2, '0') + ':00';
-
-		const datestr = parts[0] + timezone_offset_str;
+		const raw_date_str = parts[0];
 		const merchant = parts[1];
 		const amount = parts[2].includes("$") ? parseFloat(parts[2].replace("$", "").replace(/,/g, '')) : parseFloat(parts[2]);
 
 		if (isNaN(amount)) continue;
 		if (amount < 0) continue; // Skip negative amounts
 		
-		const date = new Date(datestr);
+		// Convert date string to ISO format, then to timestamp
+		const iso_date_str = parse_date_to_iso(raw_date_str, localnow, timezone_offset);
+		const date = new Date(iso_date_str);
 		const timestamp = date.getTime() / 1000;
 		
 		if (is_transaction_duplicate(timestamp, amount, existing_transactions)) {
