@@ -94,8 +94,10 @@ async function ai_parse_apple(req:any, res:any) {
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
 	const apple_data = req.body.apple_data
+	const localnow = req.body.localnow
+	const timezone_offset = Number(req.body.timezone_offset)
 
-    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, apple_data)
+    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, apple_data, localnow, timezone_offset)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
@@ -198,7 +200,7 @@ async function finance_ignore_transaction(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    let r = await Finance.Ignore_Transaction(SERVER_MAINS.db, req.body.ynab_id)
+    let r = await Finance.Ignore_Transaction(SERVER_MAINS.db, req.body.sheets_id).catch(()=> null)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify({ok:true}))

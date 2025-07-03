@@ -18,6 +18,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 	let existing_transactions: any[] = []
 	let r: any = null
 	
+	console.log(apple_data)
 	const instructions = `
 		## Instructions
 		- The following is text of Apple Card transactions. 
@@ -31,15 +32,18 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
 		- ONLY return the CSV data. Do not include a CSV header.
 	`;
+	console.log(instructions)
 	
+	debugger
 	try {
 		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
 		const [quick_notes_snap, transactions_snap, gemini_response] = await Promise.all([
 			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
 			db.collection("transactions").where("date", ">=", thirty_days_ago).get(),
 			gemini.models.generateContent({
-				//model: 'gemini-2.5-flash',
+				// model: 'gemini-2.5-flash',
 				model: 'gemini-2.5-flash-lite-preview-06-17',
+				//model: 'gemini-2.5-flash',
 				contents: instructions + "\n\n\n" + apple_data,
 			})
 		]);
@@ -60,6 +64,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 
 	const newtransactions:any[] = [];
 	
+	console.log(csvlines)
 	for (let i = 0; i < csvlines.length; i++) { 
 		const line = csvlines[i].trim();
 		if (!line) continue;
@@ -67,16 +72,16 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 		const parts = line.split(',');
 		if (parts.length !== 3) continue;
 
-		const timezone_offset_str = (timezone_offset >= 0 ? '+' : '') + 
+		const timezone_offset_str = (timezone_offset >= 0 ? '+' : '-') + 
 			Math.floor(Math.abs(timezone_offset)).toString().padStart(2, '0') + ':00';
+
 		const datestr = parts[0] + timezone_offset_str;
 		const merchant = parts[1];
-		const amount = parseFloat(parts[2]);
+		const amount = parts[2].includes("$") ? parseFloat(parts[2].replace("$", "").replace(/,/g, '')) : parseFloat(parts[2]);
 
 		if (isNaN(amount)) continue;
 		if (amount < 0) continue; // Skip negative amounts
 		
-	debugger
 		const date = new Date(datestr);
 		const timestamp = date.getTime() / 1000;
 		
@@ -117,9 +122,10 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 
 	function is_transaction_duplicate(date: number, amount: number, existing_transactions: any[]): boolean {
 		
+		const one_day_as_seconds = 24 * 60 * 60; 
 		return existing_transactions.some((existing_tx: any) => {
 			const amount_matches = existing_tx.amount === amount;
-			const date_matches = existing_tx.date === date;
+			const date_matches = existing_tx.date > date - one_day_as_seconds && existing_tx.date < date + one_day_as_seconds;
 			return amount_matches && date_matches;
 		});
 	}
@@ -228,7 +234,6 @@ const ChatAboutTransactions = (db:any, gemini:any, userQuery:string) => new Prom
 /*
 const _ChatAboutTransactions = (db:any, gemini:any, userQuery:string) => new Promise<any>(async (res, _rej)=> {
 
-	debugger
 	
 	const oneYearAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
 	
