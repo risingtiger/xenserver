@@ -26,8 +26,8 @@ const SERVER_MAINS:ServerMainsT = {
 	influxdb:{}, 
 	emailing:{},
 	sse:{},
-	multer_upload: {},
-	validate_request: (_req:any) => Promise.resolve("") 
+	validate_request: (_req:any) => Promise.resolve(""),
+	multer_upload:{}
 }
 
 
@@ -42,8 +42,8 @@ function Set_Server_Mains(m:ServerMainsT) {
 	SERVER_MAINS.influxdb = m.influxdb
 	SERVER_MAINS.emailing = m.emailing
 	SERVER_MAINS.sse = m.sse
-	SERVER_MAINS.multer_upload = m.multer_upload
 	SERVER_MAINS.validate_request = m.validate_request
+	SERVER_MAINS.multer_upload = m.multer_upload
 }
 
 
