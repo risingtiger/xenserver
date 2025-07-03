@@ -76,8 +76,8 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		if ( !( datestr.includes('2025') || datestr.includes('2026') || datestr.includes('2027') || datestr.includes('2028') || datestr.includes('2029') ) ) continue; // Skip dates not in the future
 		if (!datestr.includes('-')) continue; // Skip dates not in the format YYYY-MM-DD
 		
-		const dateObj = new Date(datestr);
-		const timestamp = Math.floor(dateObj.getTime() / 1000);
+		const [year, month, day] = datestr.split('-').map(Number);
+		const timestamp = Date.UTC(year, month - 1, day) / 1000;
 		
 		// Check if transaction already exists
 		if (is_transaction_duplicate(timestamp, amount, existing_transactions)) {
