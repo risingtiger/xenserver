@@ -53,7 +53,7 @@ function Set_Routes() {
 
     SERVER_MAINS.app.get(  '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
 
-    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  SERVER_MAINS.multer_upload.single('image_screenshot'), ai_parse_apple)       
+    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  SERVER_MAINS.multer_upload.single('file'), ai_parse_apple)       
     SERVER_MAINS.app.post(  '/api/xen/finance/ai/chat_about_transactions',					  ai_chat_about_transactions)       
 
     SERVER_MAINS.app.get(  '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
