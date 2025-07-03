@@ -12,10 +12,7 @@ import { str } from './defs_server_symlink.js'
 
 
 type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
-const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
-
-	const now = new Date().toISOString().slice(0, 19);
-	debugger
+const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, timezone_offset:number) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
 	let quick_notes: any[] = []
 	let existing_transactions: any[] = []
@@ -25,12 +22,14 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		## Instructions
 		- The following is text of Apple Card transactions. 
 		- Parse each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
-		- Date is in either date format of M/D/YY or relative to ${now} UTC, e.g. Friday, Yesterday, 12 hours ago.
-		- Convert the date to ISO 8601 format, e.g. 2025-09-12, drop the time part, just keep the date. 
-		- All time is in UTC
-		- now is ${now} UTC
+		- Date is in either date format of M/D/YY or relative to now. 
+		- examples of relative specifications are: Friday, Yesterday, 12 hours ago, etc, etc.
+		- Convert all dates to ISO 8601 format of YYYY-MM-DDTHH:MM:SS, e.g. 2025-09-12T04:34:04. 
+		- Do NOT include timezone offset in the formatted datetime.
+		- The local date and time now is ${localnow}. Compare all dates to this.
+		- Return the formatted date as a local datetime with no timezone.
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
-		- ONLY return the CSV data. Do not include a CSV header..
+		- ONLY return the CSV data. Do not include a CSV header.
 	`;
 	
 	try {
@@ -39,6 +38,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
 			db.collection("transactions").where("date", ">=", thirty_days_ago).get(),
 			gemini.models.generateContent({
+				//model: 'gemini-2.5-flash',
 				model: 'gemini-2.5-flash-lite-preview-06-17',
 				contents: instructions + "\n\n\n" + apple_data,
 			})
@@ -60,26 +60,25 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 
 	const newtransactions:any[] = [];
 	
-	for (let i = 1; i < csvlines.length; i++) { // skip header
+	for (let i = 0; i < csvlines.length; i++) { 
 		const line = csvlines[i].trim();
 		if (!line) continue;
 		
 		const parts = line.split(',');
 		if (parts.length !== 3) continue;
 
-		const datestr = parts[0];
+		const timezone_offset_str = .....
+		const datestr = parts[0] + timezone_offset_str;
 		const merchant = parts[1];
 		const amount = parseFloat(parts[2]);
 
 		if (isNaN(amount)) continue;
 		if (amount < 0) continue; // Skip negative amounts
-		if ( !( datestr.includes('2025') || datestr.includes('2026') || datestr.includes('2027') || datestr.includes('2028') || datestr.includes('2029') ) ) continue; // Skip dates not in the future
-		if (!datestr.includes('-')) continue; // Skip dates not in the format YYYY-MM-DD
 		
-		const [year, month, day] = datestr.split('-').map(Number);
-		const timestamp = Date.UTC(year, month - 1, day) / 1000;
+	debugger
+		const date = new Date(datestr);
+		const timestamp = date.getTime() / 1000;
 		
-		// Check if transaction already exists
 		if (is_transaction_duplicate(timestamp, amount, existing_transactions)) {
 			continue;
 		}
@@ -115,17 +114,12 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 
 
 
-	function is_transaction_duplicate(timestamp: number, amount: number, existing_transactions: any[]): boolean {
-		const transaction_date = new Date(timestamp * 1000);
-		const transaction_day_start = new Date(transaction_date.getFullYear(), transaction_date.getMonth(), transaction_date.getDate()).getTime() / 1000;
-		const transaction_day_end = transaction_day_start + (24 * 60 * 60) - 1;
+	function is_transaction_duplicate(date: number, amount: number, existing_transactions: any[]): boolean {
 		
 		return existing_transactions.some((existing_tx: any) => {
-			const existing_date = existing_tx.date;
-			const amount_matches = Math.abs(existing_tx.amount - amount) < 0.01;
-			const same_day = existing_date >= transaction_day_start && existing_date <= transaction_day_end;
-			
-			return amount_matches && same_day;
+			const amount_matches = existing_tx.amount === amount;
+			const date_matches = existing_tx.date === date;
+			return amount_matches && date_matches;
 		});
 	}
 
