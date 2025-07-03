@@ -104,85 +104,144 @@ Date,Description,Daily Cash,Amount
 const ParseAppleMonthCSV = (db:any) => new Promise<any[] | null>(async (res, rej)=> {
 
 	let ignored_transaction_sheets_ids: string[] = []
-	let existing_transactions_sheets_ids: any[] = []
+	let existing_transactions: any[] = []
 	let quick_notes: any[] = []
-	let sheet_transactions:any[] = []
 
 	try {
 		const ignored_transactions_promise  = db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get()
 		const existing_transactions_promise = db.collection("transactions").orderBy("date", "desc").limit(300).get()
 		const quick_notes_promise           = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
-		const sheet_transactions_promise	= sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N300' })
 		
-		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap, sheet_transactions_snap] = await Promise.all([
+		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap] = await Promise.all([
 			ignored_transactions_promise, 
 			existing_transactions_promise, 
-			quick_notes_promise,
-			sheet_transactions_promise
+			quick_notes_promise
 		]);
 		
-		ignored_transaction_sheets_ids   = ignored_transactions_snap.docs.map((m: any) => m.data().sheets_id);
-		existing_transactions_sheets_ids = existing_transactions_snap.docs.map((m: any) => m.data().sheets_id || '');
-		quick_notes						 = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
-		sheet_transactions               = sheet_transactions_snap.data.values || [];
+		ignored_transaction_sheets_ids = ignored_transactions_snap.docs.map((m: any) => m.data().sheets_id);
+		existing_transactions = existing_transactions_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
 
 	} catch {
 		rej(); return;
 	}
 
-	const transactions   : SheetsTransactionT[] = []
+	const transactions: SheetsTransactionT[] = []
+	const source_id = '7688adbc-13ef-469f-81d7-1e02098d2d06'
 	
-	for(let i = 0; i < sheet_transactions.length; i++) {
-
-		const t = sheet_transactions[i];
+	// Parse CSV string
+	const csv_lines = apple_csv_str.trim().split('\n')
+	
+	// Skip header row
+	for(let i = 1; i < csv_lines.length; i++) {
+		const line = csv_lines[i]
+		if (!line.trim()) continue
 		
-		if (!t || t.length < 14 || !t[13]) continue;
+		// Parse CSV line - handle quoted fields with commas
+		const fields = parse_csv_line(line)
+		if (fields.length < 4) continue
 		
-		const sheets_id = t[13];
-
-		if (existing_transactions_sheets_ids.includes(sheets_id) || ignored_transaction_sheets_ids.includes(sheets_id)) {
-			continue;
-		}
+		const date_str = fields[0]
+		const description = fields[1]
+		const daily_cash = fields[2]
+		const amount_str = fields[3]
 		
-		const date_str        = t[1] || '';
-		const [month, day, year] = date_str.split('/').map(Number);
-		const date_timestamp  = Date.UTC(year, month - 1, day, 12) / 1000; // make sure its going to show same day whether in UTC or local
+		// Skip returns and adjustments
+		if (description.includes('(RETURN)') || description.includes('Daily Cash Adjustment')) continue
 		
-		const amount_str      = t[4] || '0';
-		const amount          = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
+		// Parse date
+		const [month, day, year] = date_str.split('/').map(Number)
+		const date_timestamp = Date.UTC(year, month - 1, day, 12) / 1000
 		
-		const account_name    = t[5] || '';
-		const account_mapping = ACCOUNT_ID_MAP[account_name];
-		const source_id       = account_mapping ? account_mapping[0] : null;
-
-		if (!source_id) { console.log(sheets_id + "skipped because no source id");   continue;   }
+		// Parse amount
+		const amount = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')))
+		if (amount === 0) continue
+		
+		// Create unique ID from date and amount and description
+		const sheets_id = `apple_${date_str.replace(/\//g, '')}_${amount}_${description.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '')}`
+		
+		// Check if already exists or ignored
+		if (ignored_transaction_sheets_ids.includes(sheets_id)) continue
+		if (is_transaction_duplicate(date_timestamp, amount, existing_transactions)) continue
+		
+		// Extract merchant name from description
+		const merchant = extract_merchant_name(description)
 		
 		const transaction: SheetsTransactionT = {
 			id: sheets_id,
 			date: date_timestamp,
 			amount: amount,
-			merchant: t[2] || '', 
-			merchant_long: t[12] || '', 
-			notes: '', 
+			merchant: merchant,
+			merchant_long: description,
+			notes: '',
 			source_id: source_id,
-		};
+		}
 
-		handle_quick_notes(transaction, quick_notes);
+		handle_quick_notes(transaction, quick_notes)
+		transactions.push(transaction)
+	}
 
+	function parse_csv_line(line: string): string[] {
+		const fields: string[] = []
+		let current_field = ''
+		let in_quotes = false
 		
-		transactions.push(transaction);
-	}
-
-	function handle_quick_notes(sheets_t: SheetsTransactionT, quick_notes: any[]) {
-		quick_notes.forEach(qn => {
-			const six_days = 518400; // 6 days in seconds
-			if ((qn.ts > sheets_t.date - six_days && qn.ts < sheets_t.date + six_days) && (qn.amount === sheets_t.amount)) {
-				sheets_t.notes = qn.notes;
+		for (let i = 0; i < line.length; i++) {
+			const char = line[i]
+			
+			if (char === '"') {
+				in_quotes = !in_quotes
+			} else if (char === ',' && !in_quotes) {
+				fields.push(current_field.trim())
+				current_field = ''
+			} else {
+				current_field += char
 			}
-		});
+		}
+		
+		fields.push(current_field.trim())
+		return fields
 	}
 
-	res(transactions);
+	function extract_merchant_name(description: string): string {
+		// Extract merchant name from Apple Card transaction description
+		const parts = description.split(' ')
+		if (parts.length === 0) return description
+		
+		// Remove common prefixes
+		let merchant_parts = parts.filter(part => 
+			!part.match(/^\d+$/) && // Remove numbers
+			!part.includes('@') && // Remove email-like parts
+			!part.match(/^\d{5}$/) && // Remove zip codes
+			!part.match(/^[A-Z]{2}$/) && // Remove state codes
+			part !== 'USA' &&
+			part !== 'SQ' &&
+			part !== 'TST'
+		)
+		
+		// Take first few meaningful words
+		return merchant_parts.slice(0, 3).join(' ').trim() || description.split(' ')[0]
+	}
+
+	function is_transaction_duplicate(date: number, amount: number, existing_transactions: any[]): boolean {
+		const three_days_as_seconds = 3 * 24 * 60 * 60
+		return existing_transactions.some((existing_tx: any) => {
+			const amount_matches = existing_tx.amount === amount
+			const date_matches = existing_tx.date > date - three_days_as_seconds && existing_tx.date < date + three_days_as_seconds
+			return amount_matches && date_matches
+		})
+	}
+
+	function handle_quick_notes(apple_t: SheetsTransactionT, quick_notes: any[]) {
+		quick_notes.forEach(qn => {
+			const six_days = 518400 // 6 days in seconds
+			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
+				apple_t.notes = qn.notes
+			}
+		})
+	}
+
+	res(transactions)
 })
 
 
