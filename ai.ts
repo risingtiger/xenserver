@@ -79,6 +79,11 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		const dateObj = new Date(datestr);
 		const timestamp = Math.floor(dateObj.getTime() / 1000);
 		
+		// Check if transaction already exists
+		if (is_transaction_duplicate(timestamp, amount, existing_transactions)) {
+			continue;
+		}
+		
 		const transaction:any = {
 			amount: amount,
 			date: timestamp,
@@ -109,6 +114,20 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 	res(filtered_transactions) 
 
 
+
+	function is_transaction_duplicate(timestamp: number, amount: number, existing_transactions: any[]): boolean {
+		const transaction_date = new Date(timestamp * 1000);
+		const transaction_day_start = new Date(transaction_date.getFullYear(), transaction_date.getMonth(), transaction_date.getDate()).getTime() / 1000;
+		const transaction_day_end = transaction_day_start + (24 * 60 * 60) - 1;
+		
+		return existing_transactions.some((existing_tx: any) => {
+			const existing_date = existing_tx.date;
+			const amount_matches = Math.abs(existing_tx.amount - amount) < 0.01;
+			const same_day = existing_date >= transaction_day_start && existing_date <= transaction_day_end;
+			
+			return amount_matches && same_day;
+		});
+	}
 
 	function handle_quick_notes(apple_t: any, quick_notes: any[]) : string {
 		for(let i = 0; i < quick_notes.length; i++) {
