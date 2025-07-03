@@ -94,7 +94,10 @@ async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	const image_base64 = req.body.image
+	const image_file = req.files?.image
+	if (!image_file) { res.status(400).send('No image file provided'); return; }
+	
+	const image_base64 = image_file.data.toString('base64')
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
 
