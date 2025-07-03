@@ -18,6 +18,8 @@ const ParseApple = (db:any, gemini:any, image_screenshot:any, localnow:string, t
 	let existing_transactions: any[] = []
 	let r: any = null
 	
+	const image_base64 = image_screenshot.buffer.toString('base64')
+	
 	const instructions = `
 		## Instructions
 		- The image is a png screenshot of a user's Apple Wallet transactions. 
