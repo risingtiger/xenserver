@@ -51,6 +51,7 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 	const transactions   : SheetsTransactionT[] = []
 	
 	for(let i = 0; i < sheet_transactions.length; i++) {
+
 		const t = sheet_transactions[i];
 		
 		if (!t || t.length < 14 || !t[13]) continue;
@@ -63,10 +64,7 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 		
 		const date_str        = t[1] || '';
 		const [month, day, year] = date_str.split('/').map(Number);
-		const padded_month    = month.toString().padStart(2, '0');
-		const padded_day      = day.toString().padStart(2, '0');
-		const d               = new Date(`${year}-${padded_month}-${padded_day}`);
-		// const date_timestamp  = new Date(year+"-"+month+day) / 1000;
+		const date_timestamp  = Date.UTC(year, month - 1, day, 12) / 1000; // make sure its going to show same day whether in UTC or local
 		
 		const amount_str      = t[4] || '0';
 		const amount          = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
@@ -88,6 +86,7 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 		};
 
 		handle_quick_notes(transaction, quick_notes);
+
 		
 		transactions.push(transaction);
 	}
@@ -155,10 +154,10 @@ const Get_Balances = (sheets:any) => new Promise<any[] | null>(async (res, _rej)
 
 
 
-const SheetsIt = { 
+const Sheets = { 
     Get_Latest_Transactions, Get_Balances
 };
 
-export default SheetsIt;
+export default Sheets;
 
 

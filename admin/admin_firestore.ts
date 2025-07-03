@@ -22,14 +22,10 @@ const Misc_Update = async (db: any) => {
         let batch        = db.batch()
 
         for (const t of items) {
-			if (t.transacted_ts) {
-				const updateobj = {
-					transacted_ts: FieldValue.delete()
-				}
-				batch.update(collection.doc(t.id), updateobj);
+			const updateobj = {
+				ynab_id: FieldValue.delete()
 			}
-			
-			//batch.update(collection.doc(t.id), updateobj);
+			batch.update(collection.doc(t.id), updateobj);
         }
 
         await batch.commit().catch((er:any)=> console.error(er))

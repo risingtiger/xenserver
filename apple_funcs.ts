@@ -101,7 +101,163 @@ Date,Description,Daily Cash,Amount
 
 
 
+type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
+const ParseAppleScreenShot = (db:any, gemini:any, image_base64:any, localnow:string, timezone_offset:number) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
+
+	let quick_notes: any[] = []
+	let existing_transactions: any[] = []
+	let r: any = null
+	
+	const instructions = `
+		## Instructions
+		- The image is a png screenshot of a user's Apple Wallet transactions. 
+		- Extact the transactions from the image.
+		- Parse the text of each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
+		- Date is in either date format of M/D/YY or relative to now. 
+		- examples of relative specifications are: Friday, Yesterday, 12 hours ago, etc, etc.
+		- Return the parsed data in CSV format with the following columns: date, merchant, amount
+		- ONLY return the CSV data. Do not include a CSV header.
+	`;
+	/*
+	const instructions = `
+		## Instructions
+		- The image is a png screenshot of a user's Apple Wallet transactions. 
+		- Extact the transactions from the image.
+		- Parse the text of each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
+		- Date is in either date format of M/D/YY or relative to now. 
+		- examples of relative specifications are: Friday, Yesterday, 12 hours ago, etc, etc.
+		- Convert all dates to ISO 8601 format of YYYY-MM-DDTHH:MM:SS, e.g. 2025-09-12T04:34:04. 
+		- Do NOT include timezone offset in the formatted datetime.
+		- The local date and time now is ${localnow}. Compare all dates to this.
+		- Return the formatted date as a local datetime with no timezone.
+		- Return the parsed data in CSV format with the following columns: date, merchant, amount
+		- ONLY return the CSV data. Do not include a CSV header.
+	`;
+	*/
+	
+	try {
+		const contents = [
+		{
+			inlineData: {
+				mimeType: "image/jpeg",
+				data: image_base64,
+			},
+		},
+		{ text: instructions },
+		]
+
+		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
+		const [quick_notes_snap, transactions_snap, gemini_response] = await Promise.all([
+			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
+			db.collection("transactions").where("date", ">=", thirty_days_ago).get(),
+			gemini.models.generateContent({
+				// model: 'gemini-2.5-flash',
+				model: 'gemini-2.5-flash-lite-preview-06-17',
+				//model: 'gemini-2.5-flash',
+				contents,
+			})
+		]);
+		
+		quick_notes = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		existing_transactions = transactions_snap.docs.map((doc: any) => doc.data());
+		r = gemini_response;
+	} catch {
+		res([]);
+		return;
+	}
+
+	if (r.text.length < 24) { res([]); return; }
+
+	const csvlines = r.text.trim().split('\n');
+
+	if (!csvlines.length)    { res([]); return; }
+
+	const newtransactions:any[] = [];
+	
+	console.log(csvlines)
+	for (let i = 0; i < csvlines.length; i++) { 
+		const line = csvlines[i].trim();
+		if (!line) continue;
+		
+		const parts = line.split(',');
+		if (parts.length !== 3) continue;
+
+		const timezone_offset_str = (timezone_offset >= 0 ? '+' : '-') + 
+			Math.floor(Math.abs(timezone_offset)).toString().padStart(2, '0') + ':00';
+
+		const datestr = parts[0] + timezone_offset_str;
+		const merchant = parts[1];
+		const amount = parts[2].includes("$") ? parseFloat(parts[2].replace("$", "").replace(/,/g, '')) : parseFloat(parts[2]);
+
+		if (isNaN(amount)) continue;
+		if (amount < 0) continue; // Skip negative amounts
+		
+		const date = new Date(datestr);
+		const timestamp = date.getTime() / 1000;
+		
+		if (is_transaction_duplicate(timestamp, amount, existing_transactions)) {
+			continue;
+		}
+		
+		const transaction:any = {
+			amount: amount,
+			date: timestamp,
+			merchant: merchant,
+			notes: handle_quick_notes({ amount, date: timestamp }, quick_notes)
+		}
+		
+		handle_quick_notes(transaction, quick_notes);
+		
+		newtransactions.push(transaction);
+	}
+
+
+	if (newtransactions.length === 0) { res([]); return; }
+
+	const filtered_transactions = newtransactions.filter(new_tx => {
+		return !existing_transactions.some((existing_tx: any) => {
+			const amount_matches = Math.abs(existing_tx.amount - new_tx.amount) < 0.01;
+			const date_matches = existing_tx.date === new_tx.date;
+			return amount_matches && date_matches;
+		});
+	}).sort((a: any, b: any) => { 
+		if (a.date < b.date) return -1;
+		if (a.date > b.date) return 1;
+		return 0;
+	});
+
+	res(filtered_transactions) 
+
+
+
+	function is_transaction_duplicate(date: number, amount: number, existing_transactions: any[]): boolean {
+		
+		const three_days_as_seconds = 3 * 24 * 60 * 60;  
+		return existing_transactions.some((existing_tx: any) => {
+			const amount_matches = existing_tx.amount === amount;
+			const date_matches = existing_tx.date > date - three_days_as_seconds && existing_tx.date < date + three_days_as_seconds;
+			return amount_matches && date_matches;
+		});
+	}
+
+	function handle_quick_notes(apple_t: any, quick_notes: any[]) : string {
+		for(let i = 0; i < quick_notes.length; i++) {
+			const qn = quick_notes[i];
+			const six_days = 518400; // 6 days in seconds
+			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
+				apple_t.notes = qn.note;
+				return qn.note;
+			}
+		}
+		return "";
+	}
+})
+
+
+
 const ParseAppleMonthCSV = (db:any) => new Promise<any[] | null>(async (res, rej)=> {
+
+	debugger
 
 	let ignored_transaction_sheets_ids: string[] = []
 	let existing_transactions: any[] = []
@@ -175,6 +331,7 @@ const ParseAppleMonthCSV = (db:any) => new Promise<any[] | null>(async (res, rej
 			merchant_long: description,
 			notes: '',
 			source_id: source_id,
+			tags: [],
 		}
 
 		handle_quick_notes(transaction, quick_notes)
@@ -247,58 +404,10 @@ const ParseAppleMonthCSV = (db:any) => new Promise<any[] | null>(async (res, rej
 
 
 
-const Get_Balances = (sheets:any) => new Promise<any[] | null>(async (res, _rej)=> {
-
-	const spreadsheetId = '1YHRpv9RczYKqKuvT9zsbq7zIDkozjRpYDDEHxvmQAjw';
-	let response:any = {}
-	
-	try {
-		response = await sheets.spreadsheets.values.get({
-			spreadsheetId,
-			range: 'Balance History!A2:G20',
-		})
-	} 
-	catch {
-		res(null);
-		return;
-	}
-	
-	const rows = response.data.values as any[]
-
-	let datestr = ""
-	const balances:any[] = []
-	
-	for(let i = 0; i < rows.length; i++) {
-		const row = rows[i];
-		if (datestr === "") datestr = row[1]
-
-		if (row[1] !== datestr)   break; 
-
-		const auxinfo = ACCOUNT_ID_MAP[row[2]]
-
-		if (!auxinfo) break;
-
-		const x = {
-			source_id: auxinfo[0],  
-			balance: parseFloat( row[4].slice(1) ) 
-		}
-
-		balances.push(x)
-	}
-
-	res(balances);
-})
-
-
-
-
-
-
-
-const AppleCSV = { 
-    ParseAppleMonthCSV
+const AppleFuncs = { 
+    ParseAppleScreenShot, ParseAppleMonthCSV
 };
 
-export default AppleCSV;
+export default AppleFuncs;
 
 

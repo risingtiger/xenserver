@@ -4,9 +4,10 @@ import { ServerMainsT } from './defs_server_symlink.js'
 import Finance from "./finance.js"
 import FinanceYnabTransactions from "./finance_ynabtransactions.js"
 import Admin_Firestore from "./admin/admin_firestore.js"
-import SheetsIt from "./sheetsit.js"
+import Sheets from "./sheets.js"
 import Ai from "./ai.js"
 import DownloadTransactionsToCSV  from './download_transactions_to_csv.js'
+import AppleFuncs  from './apple_funcs.js'
 
 
 const ynab_account_ids = {
@@ -51,22 +52,22 @@ function Set_Server_Mains(m:ServerMainsT) {
 
 function Set_Routes() {
 
-    SERVER_MAINS.app.get(  '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
+    SERVER_MAINS.app.get(   '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
 
-    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  SERVER_MAINS.multer_upload.single('file'), ai_parse_apple)       
     SERVER_MAINS.app.post(  '/api/xen/finance/ai/chat_about_transactions',					  ai_chat_about_transactions)       
 
-    SERVER_MAINS.app.get(  '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
+    SERVER_MAINS.app.post(  '/api/xen/finance/parse_apple_screenshot',						  SERVER_MAINS.multer_upload.single('image_screenshot'), parse_apple_screenshot)       
+    SERVER_MAINS.app.get(   '/api/xen/finance/parse_apple_csv_month',						  parse_apple_csv_month)       
 
-    SERVER_MAINS.app.get(  '/api/xen/finance/grab_em',                                        grab_em)       
-    SERVER_MAINS.app.get(  '/api/xen/finance/ynab_sync_categories',                           finance_ynab_sync_categories)       
-    SERVER_MAINS.app.get(  '/api/xen/finance/get_ynab_transactions',                          get_ynab_transactions)
-    SERVER_MAINS.app.get(  '/api/xen/finance/get_sheets_transactions',                        get_sheets_transactions)
-    SERVER_MAINS.app.post(  '/api/xen/finance/save_transaction',                              finance_save_transaction)
-    SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                            finance_ignore_transaction)
-    SERVER_MAINS.app.patch(  '/api/xen/finance/patch_buckets',                                finance_patch_buckets)
-    SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          finance_update_merchant_name)
-    SERVER_MAINS.app.post(  '/api/xen/finance/update_transaction_tag',                        finance_update_transaction_tag)
+    SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
+    SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_transactions',                       sheets_get_transactions)
+
+    SERVER_MAINS.app.get(   '/api/xen/finance/grab_em',                                       grab_em)       
+    SERVER_MAINS.app.post(  '/api/xen/finance/save_transaction',                              save_transaction)
+    SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                            ignore_transaction)
+    SERVER_MAINS.app.patch( '/api/xen/finance/patch_buckets',                                 patch_buckets)
+    SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          update_merchant_name)
+    SERVER_MAINS.app.post(  '/api/xen/finance/update_transaction_tag',                        update_transaction_tag)
     SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                               firestore_save_quick_note)
     SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                             finance_add_monthsnapshot)
     SERVER_MAINS.app.post(  '/api/xen/finance/set_account_balances',						  set_account_balances)       
@@ -92,29 +93,6 @@ async function download_csv_transactions(req:any, res:any) {
 
 
 
-async function ai_parse_apple(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-debugger
-	const image_screenshot = req.file
-	console.log('image_screenshot object:', image_screenshot)
-	
-	if (!image_screenshot || !image_screenshot.buffer) {
-		console.error('No buffer found in image_screenshot')
-		res.status(400).send('No file buffer found')
-		return
-	}
-	
-	const image_base64 = image_screenshot.buffer.toString('base64')
-	const localnow = req.body.localnow
-	const timezone_offset = Number(req.body.timezone_offset)
-
-    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_screenshot, localnow, timezone_offset)
-	if (r === null) { res.status(400).send(); return; }
-
-    res.status(200).send(JSON.stringify(r))
-}
 
 async function ai_chat_about_transactions(req:any, res:any) {
 
@@ -129,16 +107,58 @@ async function ai_chat_about_transactions(req:any, res:any) {
 }
 
 
-async function sheets_get_balances(req:any, res:any) {
+
+
+async function parse_apple_screenshot(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await SheetsIt.Get_Balances(SERVER_MAINS.sheets)
+	const image_screenshot_buffer = req.file.buffer
+	const image_base64 = image_screenshot_buffer.toString('base64')
+	const localnow = req.body.localnow
+	const timezone_offset = Number(req.body.timezone_offset)
+
+    const r = await AppleFuncs.ParseAppleScreenShot(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow, timezone_offset)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
 }
 
+
+
+
+async function parse_apple_csv_month(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const r = await AppleFuncs.ParseAppleMonthCSV(SERVER_MAINS.db)
+	if (r === null) { res.status(400).send(); return; }
+
+    res.status(200).send(JSON.stringify(r))
+}
+
+
+async function sheets_get_balances(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const r = await Sheets.Get_Balances(SERVER_MAINS.sheets)
+	if (r === null) { res.status(400).send(); return; }
+
+    res.status(200).send(JSON.stringify(r))
+}
+
+
+
+
+async function sheets_get_transactions(req:any, res:any) {
+    
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const response = await Sheets.Get_Latest_Transactions(SERVER_MAINS.db, SERVER_MAINS.sheets)
+	if (response === null) { res.status(400).send(); return; }
+    res.status(200).send(JSON.stringify(response))
+}
 
 
 
@@ -155,46 +175,8 @@ async function grab_em(req:any, res:any) {
 
 
 
-async function finance_ynab_sync_categories(req:any, res:any) {
-    
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const categories = await Finance.YNAB_Sync_Categories(SERVER_MAINS.db, SERVER_MAINS.firestore)
-	if (categories === null) { res.status(400).send(); return; }
-
-	SERVER_MAINS.sse.TriggerEvent(4, {paths: ["cats"]})
-
-    res.status(200).send(JSON.stringify(categories))
-}
-
-
-
-
-async function get_ynab_transactions(req:any, res:any) {
-    
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const response = await FinanceYnabTransactions.Get(SERVER_MAINS.db, ynab_account_ids)
-	if (response === null) { res.status(400).send(); return; }
-    res.status(200).send(JSON.stringify(response))
-}
-
-
-
-
-async function get_sheets_transactions(req:any, res:any) {
-    
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const response = await SheetsIt.Get_Latest_Transactions(SERVER_MAINS.db, SERVER_MAINS.sheets)
-	if (response === null) { res.status(400).send(); return; }
-    res.status(200).send(JSON.stringify(response))
-}
-
-
-
-
-async function finance_save_transaction(req:any, res:any) {
+async function save_transaction(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -209,7 +191,7 @@ async function finance_save_transaction(req:any, res:any) {
 
 
 
-async function finance_ignore_transaction(req:any, res:any) {
+async function ignore_transaction(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -222,7 +204,7 @@ async function finance_ignore_transaction(req:any, res:any) {
 
 
 
-async function finance_patch_buckets(req:any, res:any) {
+async function patch_buckets(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -237,7 +219,7 @@ async function finance_patch_buckets(req:any, res:any) {
 
 
 
-async function finance_update_merchant_name(req:any, res:any) {
+async function update_merchant_name(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -252,7 +234,7 @@ async function finance_update_merchant_name(req:any, res:any) {
 
 
 
-async function finance_update_transaction_tag(req:any, res:any) {
+async function update_transaction_tag(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
