@@ -15,6 +15,7 @@ type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes:
 const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
 	const now = new Date().toISOString().split('T')[0] + 'T' + new Date().toISOString().split('T')[1].substring(0, 8)
+	debugger
 
 	let quick_notes: any[] = []
 	let existing_transactions: any[] = []
@@ -36,7 +37,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
 		const [quick_notes_snap, transactions_snap, gemini_response] = await Promise.all([
 			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
-			db.collection("transactions").where("ts", ">=", thirty_days_ago).get(),
+			db.collection("transactions").where("date", ">=", thirty_days_ago).get(),
 			gemini.models.generateContent({
 				model: 'gemini-2.5-flash-lite-preview-06-17',
 				contents: instructions + "\n\n\n" + apple_data,
@@ -47,7 +48,6 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 		existing_transactions = transactions_snap.docs.map((doc: any) => doc.data());
 		r = gemini_response;
 	} catch {
-		// Continue without quick notes and transactions if fetch fails
 		res([]);
 		return;
 	}
@@ -83,7 +83,7 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 			amount: amount,
 			date: timestamp,
 			merchant: merchant,
-			notes: '',
+			notes: handle_quick_notes({ amount, date: timestamp }, quick_notes)
 		}
 		
 		handle_quick_notes(transaction, quick_notes);
@@ -110,13 +110,16 @@ const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseA
 
 
 
-	function handle_quick_notes(apple_t: any, quick_notes: any[]) {
-		quick_notes.forEach(qn => {
+	function handle_quick_notes(apple_t: any, quick_notes: any[]) : string {
+		for(let i = 0; i < quick_notes.length; i++) {
+			const qn = quick_notes[i];
 			const six_days = 518400; // 6 days in seconds
 			if ((qn.ts > apple_t.date - six_days && qn.ts < apple_t.date + six_days) && (qn.amount === apple_t.amount)) {
-				apple_t.notes = qn.notes;
+				apple_t.notes = qn.note;
+				return qn.note;
 			}
-		});
+		}
+		return "";
 	}
 })
 
