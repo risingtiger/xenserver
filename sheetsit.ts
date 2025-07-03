@@ -63,8 +63,8 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 		}
 		
 		const date_str        = t[1] || '';
-		const date_obj        = new Date(date_str);
-		const date_timestamp  = Math.floor(date_obj.getTime() / 1000);
+		const [month, day, year] = date_str.split('/').map(Number);
+		const date_timestamp  = Date.UTC(year, month - 1, day) / 1000;
 		
 		const amount_str      = t[4] || '0';
 		const amount          = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
