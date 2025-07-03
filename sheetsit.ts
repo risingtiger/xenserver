@@ -20,74 +20,67 @@ const spreadsheetId = '1YHRpv9RczYKqKuvT9zsbq7zIDkozjRpYDDEHxvmQAjw';
 
 
 const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null>(async (res, rej)=> {
+	debugger
 
 	let ignored_transaction_sheets_ids: string[] = []
-	let existing_transactions: any[] = []
+	let existing_transactions_sheets_ids: any[] = []
 	let quick_notes: any[] = []
+	let sheet_transactions:any[] = []
 
 	try {
-		const ignored_transactions_promise = db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get()
-		const existing_transactions_promise = db.collection("transactions").orderBy("date", "desc").limit(400).get()
+		const ignored_transactions_promise  = db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get()
+		const existing_transactions_promise = db.collection("transactions").orderBy("date", "desc").limit(300).get()
 		const quick_notes_promise           = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
+		const sheet_transactions_promise	= sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N300' })
 		
-		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap] = await Promise.all([
+		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap, sheet_transactions_snap] = await Promise.all([
 			ignored_transactions_promise, 
 			existing_transactions_promise, 
-			quick_notes_promise
+			quick_notes_promise,
+			sheet_transactions_promise
 		]);
 		
-		ignored_transaction_sheets_ids = ignored_transactions_snap.docs
-			.map((m: any) => m.data().sheets_id)
-			.filter((id:any) => id);
-		existing_transactions = existing_transactions_snap.docs.map((m: any) => m.data());
-		quick_notes           = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		ignored_transaction_sheets_ids   = ignored_transactions_snap.docs.map((m: any) => m.data().sheets_id);
+		existing_transactions_sheets_ids = existing_transactions_snap.docs.map((m: any) => m.data().sheets_id || '');
+		quick_notes						 = quick_notes_snap.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+		sheet_transactions               = sheet_transactions_snap.data.values || [];
 
 	} catch {
 		rej(); return;
 	}
 
-
-	let response:any = {}
-	
-	try   {  response = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N500' }) } 
-	catch {  rej(); return; }
-	
-	const rows           = response.data.values as any[]
 	const transactions   : SheetsTransactionT[] = []
 	
-	for(let i = 0; i < rows.length; i++) {
-		const row = rows[i];
+	for(let i = 0; i < sheet_transactions.length; i++) {
+		const t = sheet_transactions[i];
 		
-		if (!row || row.length < 14 || !row[13]) continue;
+		if (!t || t.length < 14 || !t[13]) continue;
 		
-		const sheets_id = row[13];
-		if (existing_transactions.find((t: any) => t.sheets_id === sheets_id)) {
-			continue;
-		}
-		if (ignored_transaction_sheets_ids.includes(sheets_id)) {
-			continue;
-		}
-		
-		const date_str = row[1] || '';
-		const date_obj = new Date(date_str);
-		const date_timestamp = Math.floor(date_obj.getTime() / 1000);
-		
-		const amount_str = row[4] || '0';
-		const amount = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
-		
-		const account_name = row[5] || '';
-		const account_mapping = ACCOUNT_ID_MAP[account_name];
-		const source_id = account_mapping ? account_mapping[0] : null;
+		const sheets_id = t[13];
 
-		if (!source_id) {   continue;   }
+		if (existing_transactions_sheets_ids.includes(sheets_id) || ignored_transaction_sheets_ids.includes(sheets_id)) {
+			continue;
+		}
+		
+		const date_str        = t[1] || '';
+		const date_obj        = new Date(date_str);
+		const date_timestamp  = Math.floor(date_obj.getTime() / 1000);
+		
+		const amount_str      = t[4] || '0';
+		const amount          = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
+		
+		const account_name    = t[5] || '';
+		const account_mapping = ACCOUNT_ID_MAP[account_name];
+		const source_id       = account_mapping ? account_mapping[0] : null;
+
+		if (!source_id) { console.log(sheets_id + "skipped because no source id");   continue;   }
 		
 		const transaction: SheetsTransactionT = {
-			sheets_id: sheets_id,
-			preset_cat_name: row[3] || null, 
+			id: sheets_id,
 			date: date_timestamp,
 			amount: amount,
-			merchant: row[2] || '', 
-			merchant_long: row[12] || '', 
+			merchant: t[2] || '', 
+			merchant_long: t[12] || '', 
 			notes: '', 
 			source_id: source_id,
 		};
