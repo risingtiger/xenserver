@@ -89,20 +89,16 @@ async function download_csv_transactions(req:any, res:any) {
 }
 
 
+
 async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	const image_data = req.files?.image
+	const apple_data = req.body.apple_data
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
 
-	if (!image_data) {
-		res.status(400).send('No image provided');
-		return;
-	}
-
-    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_data, localnow, timezone_offset)
+    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, apple_data, localnow, timezone_offset)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
