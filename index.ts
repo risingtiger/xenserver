@@ -7,7 +7,6 @@ import Admin_Firestore from "./admin/admin_firestore.js"
 import SheetsIt from "./sheetsit.js"
 import Ai from "./ai.js"
 import DownloadTransactionsToCSV  from './download_transactions_to_csv.js'
-import multer from 'multer'
 
 
 const ynab_account_ids = {
@@ -15,8 +14,6 @@ const ynab_account_ids = {
 	family: "dbb7396b-413f-40d7-9a3f-7c986e485233"
 }
 
-
-const upload = multer({ storage: multer.memoryStorage() })
 
 const SERVER_MAINS:ServerMainsT = { 
 	app:{}, 
@@ -54,7 +51,7 @@ function Set_Routes() {
 
     SERVER_MAINS.app.get(  '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
 
-    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple', upload.single('image'),		  ai_parse_apple)       
+    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  ai_parse_apple)       
     SERVER_MAINS.app.post(  '/api/xen/finance/ai/chat_about_transactions',					  ai_chat_about_transactions)       
 
     SERVER_MAINS.app.get(  '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
@@ -97,16 +94,11 @@ async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	const image_data = req.file
+	const image_base64 = req.body.image
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
 
-	if (!image_data) {
-		res.status(400).send('No image provided');
-		return;
-	}
-
-    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_data, localnow, timezone_offset)
+    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow, timezone_offset)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
