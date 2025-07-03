@@ -67,7 +67,8 @@ const ParseApple = (db:any, gemini:any, apple_data:string, localnow:string, time
 		const parts = line.split(',');
 		if (parts.length !== 3) continue;
 
-		const timezone_offset_str = .....
+		const timezone_offset_str = (timezone_offset >= 0 ? '+' : '') + 
+			Math.floor(Math.abs(timezone_offset)).toString().padStart(2, '0') + ':00';
 		const datestr = parts[0] + timezone_offset_str;
 		const merchant = parts[1];
 		const amount = parseFloat(parts[2]);
