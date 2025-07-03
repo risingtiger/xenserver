@@ -51,7 +51,7 @@ function Set_Routes() {
 
     SERVER_MAINS.app.get(  '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
 
-    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  ai_parse_apple)       
+    SERVER_MAINS.app.post(  '/api/xen/finance/ai/parse_apple',								  SERVER_MAINS.multer_upload.single('image_screenshot'), ai_parse_apple)       
     SERVER_MAINS.app.post(  '/api/xen/finance/ai/chat_about_transactions',					  ai_chat_about_transactions)       
 
     SERVER_MAINS.app.get(  '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
@@ -94,14 +94,12 @@ async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	const image_file = req.files?.image
-	if (!image_file) { res.status(400).send('No image file provided'); return; }
-	
-	const image_base64 = image_file.data.toString('base64')
+	debugger
+	const image_screenshot = req.file
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
 
-    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow, timezone_offset)
+    const r = await Ai.ParseApple(SERVER_MAINS.db, SERVER_MAINS.gemini, image_screenshot, localnow, timezone_offset)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
