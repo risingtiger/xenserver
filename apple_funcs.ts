@@ -427,8 +427,7 @@ function parse_date_to_iso(date_str: string, localnow: string): string {
 		return target_date.toISOString();
 	}
 
-	// modify date_match so that it matches 2 digit years instead of 4 digit years AI!
-	const date_match = date_str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+	const date_match = date_str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2})/);
 	if (date_match) {
 		debugger
 		const [, month, day, year] = date_match;
