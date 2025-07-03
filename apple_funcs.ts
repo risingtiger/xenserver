@@ -411,8 +411,7 @@ function parse_date_to_iso(date_str: string, localnow: string): string {
 	if (date_str.toLowerCase().includes('yesterday')) {
 		const yesterday = new Date(now);
 		yesterday.setDate(yesterday.getDate() - 1);
-		yesterday.setHours(12, 0, 0, 0);
-		// modify this all so that the ISOString is always going to be at noon UTC time  AI!
+		yesterday.setUTCHours(12, 0, 0, 0);
 		return yesterday.toISOString();
 	}
 	
@@ -424,14 +423,14 @@ function parse_date_to_iso(date_str: string, localnow: string): string {
 		let   days_back = (current_day - day_index + 7) % 7;
 		if (days_back === 0) days_back = 7; // If it's the same day, assume last week
 		target_date.setDate(target_date.getDate() - days_back);
-		target_date.setHours(12, 0, 0, 0);
+		target_date.setUTCHours(12, 0, 0, 0);
 		return target_date.toISOString();
 	}
 	
 	const hour_match = date_str.match(/(\d+)\s*hours?\s*ago/i);
 	if (hour_match) {
 		const today = new Date(now);
-		today.setHours(12, 0, 0, 0);
+		today.setUTCHours(12, 0, 0, 0);
 		return today.toISOString();
 	}
 	
@@ -439,12 +438,12 @@ function parse_date_to_iso(date_str: string, localnow: string): string {
 	if (date_match) {
 		const [, month, day, year] = date_match;
 		const full_year = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
-		const parsed_date = new Date(full_year, parseInt(month) - 1, parseInt(day), 12, 0, 0, 0);
+		const parsed_date = new Date(Date.UTC(full_year, parseInt(month) - 1, parseInt(day), 12, 0, 0, 0));
 		return parsed_date.toISOString();
 	}
 	
 	const today = new Date(now);
-	today.setHours(12, 0, 0, 0);
+	today.setUTCHours(12, 0, 0, 0);
 	return today.toISOString();
 }
 
