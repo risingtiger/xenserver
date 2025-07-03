@@ -14,7 +14,7 @@ import { str } from './defs_server_symlink.js'
 type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
 const ParseApple = (db:any, gemini:any, apple_data:string) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
-	const now = new Date().toISOString().split('T')[0] + 'T' + new Date().toISOString().split('T')[1].substring(0, 8)
+	const now = new Date().toISOString().slice(0, 19);
 	debugger
 
 	let quick_notes: any[] = []
