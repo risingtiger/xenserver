@@ -43,7 +43,7 @@ const ParseApple = (db:any, gemini:any, image_base64:string, localnow:string, ti
 				// model: 'gemini-2.5-flash',
 				model: 'gemini-2.5-flash-lite-preview-06-17',
 				//model: 'gemini-2.5-flash',
-				contents: instructions + "\n\n\n" + apple_data,
+				contents: instructions + "\n\n\n" + image_base64,
 			})
 		]);
 		
