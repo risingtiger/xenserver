@@ -12,7 +12,7 @@ import { str } from './defs_server_symlink.js'
 
 
 type ParseAppleReturnT = { amount:number, date: number, merchant: string, notes: string }
-const ParseApple = (db:any, gemini:any, image_base64:string, localnow:string, timezone_offset:number) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
+const ParseApple = (db:any, gemini:any, image_screenshot:any, localnow:string, timezone_offset:number) => new Promise<ParseAppleReturnT[]|null>(async (res, _rej)=> {
 
 	let quick_notes: any[] = []
 	let existing_transactions: any[] = []
@@ -20,8 +20,9 @@ const ParseApple = (db:any, gemini:any, image_base64:string, localnow:string, ti
 	
 	const instructions = `
 		## Instructions
-		- The following is text of Apple Card transactions. 
-		- Parse each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
+		- The image is a png screenshot of a user's Apple Wallet transactions. 
+		- Extact the transactions from the image.
+		- Parse the text of each one. Retrieve the date, merchant name, amount. Ignore any text that is not a transaction 
 		- Date is in either date format of M/D/YY or relative to now. 
 		- examples of relative specifications are: Friday, Yesterday, 12 hours ago, etc, etc.
 		- Convert all dates to ISO 8601 format of YYYY-MM-DDTHH:MM:SS, e.g. 2025-09-12T04:34:04. 
@@ -31,10 +32,19 @@ const ParseApple = (db:any, gemini:any, image_base64:string, localnow:string, ti
 		- Return the parsed data in CSV format with the following columns: date, merchant, amount
 		- ONLY return the CSV data. Do not include a CSV header.
 	`;
-	console.log(instructions)
 	
 	debugger
 	try {
+		const contents = [
+		{
+			inlineData: {
+				mimeType: "image/jpeg",
+				data: image_base64,
+			},
+		},
+		{ text: instructions },
+		]
+
 		const thirty_days_ago = Math.floor(Date.now() / 1000) - (30 * 24 * 60 * 60);
 		const [quick_notes_snap, transactions_snap, gemini_response] = await Promise.all([
 			db.collection("quick_notes").orderBy("ts", "desc").limit(200).get(),
@@ -43,7 +53,7 @@ const ParseApple = (db:any, gemini:any, image_base64:string, localnow:string, ti
 				// model: 'gemini-2.5-flash',
 				model: 'gemini-2.5-flash-lite-preview-06-17',
 				//model: 'gemini-2.5-flash',
-				contents: instructions + "\n\n\n" + image_base64,
+				contents,
 			})
 		]);
 		
