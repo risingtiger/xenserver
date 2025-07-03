@@ -96,6 +96,7 @@ async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
+debugger
 	const image_screenshot = req.file
 	const image_base64 = image_screenshot.buffer.toString('base64')
 	const localnow = req.body.localnow
