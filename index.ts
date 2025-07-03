@@ -92,10 +92,11 @@ async function download_csv_transactions(req:any, res:any) {
 
 async function ai_parse_apple(req:any, res:any) {
 
-	debugger
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	const image_data = req.files?.image
+	// For multipart form data, the image should be in req.body or req.file
+	// depending on your middleware setup
+	const image_data = req.file || req.body.image
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
 
