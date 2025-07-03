@@ -96,7 +96,6 @@ async function ai_parse_apple(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-	debugger
 	const image_screenshot = req.file
 	const localnow = req.body.localnow
 	const timezone_offset = Number(req.body.timezone_offset)
