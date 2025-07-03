@@ -92,6 +92,7 @@ async function download_csv_transactions(req:any, res:any) {
 
 async function ai_parse_apple(req:any, res:any) {
 
+	debugger
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
 	const image_data = req.files?.image
