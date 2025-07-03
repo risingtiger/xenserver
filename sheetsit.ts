@@ -20,7 +20,6 @@ const spreadsheetId = '1YHRpv9RczYKqKuvT9zsbq7zIDkozjRpYDDEHxvmQAjw';
 
 
 const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null>(async (res, rej)=> {
-	debugger
 
 	let ignored_transaction_sheets_ids: string[] = []
 	let existing_transactions_sheets_ids: any[] = []
@@ -64,7 +63,8 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 		
 		const date_str        = t[1] || '';
 		const [month, day, year] = date_str.split('/').map(Number);
-		const date_timestamp  = Date.UTC(year, month - 1, day) / 1000;
+		const d				  = new Date(year+"-"+month+day)
+		// const date_timestamp  = new Date(year+"-"+month+day) / 1000;
 		
 		const amount_str      = t[4] || '0';
 		const amount          = Math.abs(parseFloat(amount_str.replace(/[$,]/g, '')));
