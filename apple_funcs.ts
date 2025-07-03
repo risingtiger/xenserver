@@ -426,16 +426,11 @@ function parse_date_to_iso(date_str: string, localnow: string): string {
 		target_date.setUTCHours(12, 0, 0, 0);
 		return target_date.toISOString();
 	}
-	
-	const hour_match = date_str.match(/(\d+)\s*hours?\s*ago/i);
-	if (hour_match) {
-		const today = new Date(now);
-		today.setUTCHours(12, 0, 0, 0);
-		return today.toISOString();
-	}
-	
+
+	// modify date_match so that it matches 2 digit years instead of 4 digit years AI!
 	const date_match = date_str.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
 	if (date_match) {
+		debugger
 		const [, month, day, year] = date_match;
 		const full_year = year.length === 2 ? 2000 + parseInt(year) : parseInt(year);
 		const parsed_date = new Date(Date.UTC(full_year, parseInt(month) - 1, parseInt(day), 12, 0, 0, 0));
