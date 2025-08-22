@@ -26,11 +26,13 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 	let quick_notes: any[] = []
 	let sheet_transactions:any[] = []
 
+	const three_months_ago = Math.floor(Date.now() / 1000) - (3 * 30 * 24 * 60 * 60); // 3 months in seconds
+
 	try {
-		const ignored_transactions_promise  = db.collection("ignored_transactions").orderBy("ts", "desc").limit(100).get()
-		const existing_transactions_promise = db.collection("transactions").orderBy("date", "desc").limit(300).get()
-		const quick_notes_promise           = db.collection("quick_notes").orderBy("ts", "desc").limit(200).get()
-		const sheet_transactions_promise	= sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N300' })
+		const ignored_transactions_promise  = db.collection("ignored_transactions").where("ts", ">=", three_months_ago).orderBy("ts", "desc").get()
+		const existing_transactions_promise = db.collection("transactions").where("date", ">=", three_months_ago).orderBy("date", "desc").get()
+		const quick_notes_promise           = db.collection("quick_notes").where("ts", ">=", three_months_ago).orderBy("ts", "desc").get()
+		const sheet_transactions_promise	= sheets.spreadsheets.values.get({ spreadsheetId, range: 'Transactions!A2:N200' })
 		
 		const [ignored_transactions_snap, existing_transactions_snap, quick_notes_snap, sheet_transactions_snap] = await Promise.all([
 			ignored_transactions_promise, 
@@ -83,6 +85,7 @@ const Get_Latest_Transactions = (db:any, sheets:any) => new Promise<any[] | null
 			merchant_long: t[12] || '', 
 			notes: '', 
 			source_id: source_id,
+			tags: []
 		};
 
 		handle_quick_notes(transaction, quick_notes);
@@ -124,28 +127,27 @@ const Get_Balances = (sheets:any) => new Promise<any[] | null>(async (res, _rej)
 	
 	const rows = response.data.values as any[]
 
-	let datestr = ""
-	const balances:any[] = []
+	const balances:Map<string, {id:string, balance:number}> = new Map();
 	
 	for(let i = 0; i < rows.length; i++) {
-		const row = rows[i];
-		if (datestr === "") datestr = row[1]
-
-		if (row[1] !== datestr)   break; 
-
+		const row     = rows[i];
 		const auxinfo = ACCOUNT_ID_MAP[row[2]]
 
-		if (!auxinfo) break;
+		if (!auxinfo || balances.has(row[2])) continue;
 
 		const x = {
-			source_id: auxinfo[0],  
+			id: auxinfo[0],  
 			balance: parseFloat( row[4].slice(1) ) 
 		}
 
-		balances.push(x)
+		balances.set(row[2], x);
 	}
 
-	res(balances);
+	const returnbalances:any[] = [];
+	for (const [key, value] of balances) {
+		returnbalances.push(value);
+	}
+	res(returnbalances);
 })
 
 

@@ -25,7 +25,6 @@ async function Grab_Em(_db:any, accountids:{[key:string]:string}) {   return new
     const token = process.env.XEN_YNAB
 
     let promises:any[] = [
-
         fetch(`https://api.ynab.com/v1/budgets/${accountids.holdem}/accounts`, { method: 'GET', headers: { "Authorization": `Bearer ${token}` }}),
         fetch(`https://api.ynab.com/v1/budgets/${accountids.family}/accounts`, {method: 'GET',  headers: { "Authorization": `Bearer ${token}` }})
     ]
@@ -218,8 +217,12 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
 
 
+/*
+Kinda fucked! There is no real way to determine if transaction has already been processed and saved. There can split etc. It just don'st workw
+*/
 async function Save_Transactions(db:any, new_transactions:( SaveNewTransactionServerT & {ts:number} )[]) {   return new Promise<number|null>(async (res, _rej)=> {
     
+	debugger
     const batch = db.batch();
     const now = Math.floor(Date.now() / 1000);
     const savedTransactions:{[key:string]:any}[] = [];
@@ -299,7 +302,7 @@ async function Patch_Transaction(db:any, id:string, changed:any) {   return new 
 
 
 
-async function Update_Merchant_Name(db:any, newname:string, oldname:string) {   return new Promise<any>(async (res, _rej)=> {
+async function Update_Merchant_Name_In_All_Transactions(db:any, newname:string, oldname:string) {   return new Promise<any>(async (res, _rej)=> {
 
 	const now = Math.floor(Date.now() / 1000)
 
@@ -350,6 +353,36 @@ async function Update_Transaction_Tag(db:any, docid:string, tagid:string) {   re
 
 	da.cat    = {__path: da.cat._path.segments    }
 	da.source = {__path: da.source._path.segments }
+
+    res(da)
+})}
+
+
+
+
+async function Update_Category_Quadrant(db:any, catid:string, quadrant:number) {   return new Promise<any>(async (res, _rej)=> {
+
+	const now = Math.floor(Date.now() / 1000)
+
+	const docref = db.collection('cats').doc(catid)
+	let   r = await docref.get().catch((_err:any)=>null)
+	if (!r || !r.exists) { res(null); return }
+
+	const catData = r.data()
+	if (!catData) { res(null); return }
+
+	const tags = catData.tags || []
+	tags[0] = quadrant
+
+	const d:any = { tags, ts: now }
+
+	r = await docref.set(d, {merge:true}).catch((_err:any)=>null )
+	if (!r) { res(null); return }
+
+	r = await docref.get().catch((_err:any)=>null)
+	if (!r) { res(null); return; }
+
+	const da = { id: r.id, ...r.data() }
 
     res(da)
 })}
@@ -442,13 +475,13 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 
 
-async function Set_Account_Balances(db:any, accounts:{source_id:string, balance:number}[]) {   return new Promise<any>(async (res, rej)=> {
+async function Set_Account_Balances(db:any, accounts:{id:string, balance:number}[]) {   return new Promise<any>(async (res, rej)=> {
     
     const batch = db.batch();
     const now   = Math.floor(Date.now() / 1000);
     
     for (const account of accounts) {
-        const docRef = db.collection('sources').doc(account.source_id);
+        const docRef = db.collection('sources').doc(account.id);
         batch.update(docRef, {
             balance: account.balance,
             ts: now
@@ -474,7 +507,7 @@ async function Set_Account_Balances(db:any, accounts:{source_id:string, balance:
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Update_Transaction_Tag, Patch_Buckets, Update_Merchant_Name, Save_Quick_Note, Add_MonthSnapshot, Set_Account_Balances };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Update_Transaction_Tag, Update_Category_Quadrant, Patch_Buckets, Update_Merchant_Name_In_All_Transactions, Save_Quick_Note, Add_MonthSnapshot, Set_Account_Balances };
 
 export default Finance;
 

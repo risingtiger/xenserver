@@ -13,19 +13,23 @@ const Misc_Update = async (db: any) => {
     return new Promise<any>(async (res, _rej)=> {
 
 		debugger
-        const collection = db.collection("transactions")
+
+		const ts = Math.floor(Date.now()/1000)
+
+		const collection = db.collection("cats")
+        const snapshot = await collection.get()
         //const catRef = db.doc('cats/72dda9c4-27f9-4459-853c-a00631795909')
         //const snapshot = await collection.where('cat', '==', catRef).get()
-        const snapshot = await collection.get()
-        const items = snapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+        const items = snapshot.docs.map((m: any) => ({ actual_id: m.id, ...m.data() }));
 
         let batch        = db.batch()
 
         for (const t of items) {
 			const updateobj = {
-				ynab_id: FieldValue.delete()
+				ts,
+				payments_budget: FieldValue.delete(),
 			}
-			batch.update(collection.doc(t.id), updateobj);
+			batch.update(collection.doc(t.actual_id), updateobj);
         }
 
         await batch.commit().catch((er:any)=> console.error(er))

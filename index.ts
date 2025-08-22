@@ -1,24 +1,27 @@
 
+ 
+ import { ServerMainsT } from './defs_server_symlink.js'
+ import Finance from "./finance.js"
+ import FinanceYnabTransactions from "./finance_ynabtransactions.js"
+ import Admin_Firestore from "./admin/admin_firestore.js"
+ import Sheets from "./sheets.js"
+ import Ai from "./ai.js"
+ import DownloadTransactionsToCSV  from './download_transactions_to_csv.js'
+ import AppleFuncs  from './apple_funcs.js'
+ import { Move_Transactions } from './move_transactions.js'
+ 
+ 
+ const ynab_account_ids = {
+ 	holdem: "b0b3f2b2-5067-4f57-a248-15fa97a18cf5",
+ 	family: "dbb7396b-413f-40d7-9a3f-7c986e485233"
+ }
 
-import { ServerMainsT } from './defs_server_symlink.js'
-import Finance from "./finance.js"
-import FinanceYnabTransactions from "./finance_ynabtransactions.js"
-import Admin_Firestore from "./admin/admin_firestore.js"
-import Sheets from "./sheets.js"
-import Ai from "./ai.js"
-import DownloadTransactionsToCSV  from './download_transactions_to_csv.js'
-import AppleFuncs  from './apple_funcs.js'
-
-
-const ynab_account_ids = {
-	holdem: "b0b3f2b2-5067-4f57-a248-15fa97a18cf5",
-	family: "dbb7396b-413f-40d7-9a3f-7c986e485233"
-}
 
 
 const SERVER_MAINS:ServerMainsT = { 
 	app:{}, 
 	db:{}, 
+	mdb:{},
 	appversion:0, 
 	sheets:{}, 
 	gemini:{},
@@ -35,6 +38,7 @@ const SERVER_MAINS:ServerMainsT = {
 function Set_Server_Mains(m:ServerMainsT) {
 	SERVER_MAINS.app = m.app 
 	SERVER_MAINS.db = m.db
+	SERVER_MAINS.mdb = m.mdb
 	SERVER_MAINS.appversion = m.appversion
 	SERVER_MAINS.sheets = m.sheets
 	SERVER_MAINS.gemini = m.gemini
@@ -62,15 +66,14 @@ function Set_Routes() {
     SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
     SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_transactions',                       sheets_get_transactions)
 
-    SERVER_MAINS.app.get(   '/api/xen/finance/grab_em',                                       grab_em)       
-    SERVER_MAINS.app.post(  '/api/xen/finance/save_transaction',                              save_transaction)
-    SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                            ignore_transaction)
-    SERVER_MAINS.app.patch( '/api/xen/finance/patch_buckets',                                 patch_buckets)
-    SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name',                          update_merchant_name)
-    SERVER_MAINS.app.post(  '/api/xen/finance/update_transaction_tag',                        update_transaction_tag)
-    SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                               firestore_save_quick_note)
-    SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                             finance_add_monthsnapshot)
-    SERVER_MAINS.app.post(  '/api/xen/finance/set_account_balances',						  set_account_balances)       
+     SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name_in_all_transactions',     update_merchant_name_in_all_transactions)
+     SERVER_MAINS.app.post(  '/api/xen/finance/transactions/:transactionid/update_tag',       update_transaction_tag)
+     SERVER_MAINS.app.post(  '/api/xen/finance/cats/:catid/update_quadrant',                  update_category_quadrant)
+     SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                              firestore_save_quick_note)
+     SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                            finance_add_monthsnapshot)
+     SERVER_MAINS.app.post(  '/api/xen/finance/set_source_balances',						  set_source_balances)       
+     SERVER_MAINS.app.post(  '/api/xen/finance/move_transactions',                            move_transactions)
+
 
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_update',                            admin_firestore_misc_update)
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_get',                               admin_firestore_misc_get)
@@ -78,10 +81,12 @@ function Set_Routes() {
 
 
 
+ 
+ // -- ROUTE HANDLERS --
+ 
+ 
+ async function download_csv_transactions(req:any, res:any) {
 
-// -- ROUTE HANDLERS --
-
-async function download_csv_transactions(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -116,9 +121,8 @@ async function parse_apple_screenshot(req:any, res:any) {
 	const image_screenshot_buffer = req.file.buffer
 	const image_base64 = image_screenshot_buffer.toString('base64')
 	const localnow = req.body.localnow
-	const timezone_offset = Number(req.body.timezone_offset)
 
-    const r = await AppleFuncs.ParseAppleScreenShot(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow, timezone_offset)
+    const r = await AppleFuncs.ParseAppleScreenShot(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow)
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
@@ -176,14 +180,14 @@ async function grab_em(req:any, res:any) {
 
 
 
-async function save_transaction(req:any, res:any) {
+async function save_transactions(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
     const r = await Finance.Save_Transactions(SERVER_MAINS.db, req.body)
 	if (r === null) { res.status(400).send(); return; }
 
-    SERVER_MAINS.sse.TriggerEvent(4, { paths:["transactions"] } )
+    SERVER_MAINS.sse.TriggerEvent("datasync_collection", { paths:["transactions"] } )
 
     res.status(200).send(JSON.stringify({ok:true}))
 }
@@ -211,7 +215,7 @@ async function patch_buckets(req:any, res:any) {
     const r = await Finance.Patch_Buckets(SERVER_MAINS.db, req.body.catupdates, req.body.area_id, req.body.area_buckets_changed)
 	if (r === null) { res.status(400).send(); return; }
 
-	SERVER_MAINS.sse.TriggerEvent(4, {paths: ["cats","areas"]})
+	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["cats","areas"]})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -219,14 +223,15 @@ async function patch_buckets(req:any, res:any) {
 
 
 
-async function update_merchant_name(req:any, res:any) {
+async function update_merchant_name_in_all_transactions(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await Finance.Update_Merchant_Name(SERVER_MAINS.db, req.body.newname, req.body.oldname)
+    const r = await Finance.Update_Merchant_Name_In_All_Transactions(SERVER_MAINS.db, req.body.newname, req.body.oldname)
 	if (r === null) { res.status(400).send(); return; }
 
-	SERVER_MAINS.sse.TriggerEvent(4, {paths: ["transactions"]})
+	// we are updating all of transactions because merchant name change could span across multiple transactions
+	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["transactions"]})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -238,10 +243,38 @@ async function update_transaction_tag(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const r = await Finance.Update_Transaction_Tag(SERVER_MAINS.db, req.body.docid, req.body.tagid)
+    const r = await Finance.Update_Transaction_Tag(SERVER_MAINS.db, req.params.transactionid, req.body.tagid)
 	if (!r) { res.status(400).send(); return; }
 
-	SERVER_MAINS.sse.TriggerEvent(2, {path: "transactions/" + req.body.docid, data: r})
+	SERVER_MAINS.sse.TriggerEvent("datasync_doc_patch", {path: "transactions/" + req.body.docid, data: r})
+
+    res.status(200).send(JSON.stringify(r))
+}
+
+
+
+
+async function update_category_quadrant(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const catid = req.params.catid
+    const quadrant = req.body.quadrant
+
+    if (!catid || !quadrant) {
+        res.status(400).send(); 
+        return;
+    }
+
+    if (![1, 2, 3, 4].includes(Number(quadrant))) {
+        res.status(400).send(); 
+        return;
+    }
+
+    const r = await Finance.Update_Category_Quadrant(SERVER_MAINS.db, catid, Number(quadrant))
+    if (!r) { res.status(400).send(); return; }
+
+    SERVER_MAINS.sse.TriggerEvent("datasync_doc_patch", {path: "cats/" + catid, data: r} ) 
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -267,7 +300,7 @@ async function finance_add_monthsnapshot(req:any, res:any) {
     const r = await Finance.Add_MonthSnapshot(SERVER_MAINS.db, req.body.monthSnapshot)
 	if (r === null) { res.status(400).send(); return; }
 
-	SERVER_MAINS.sse.TriggerEvent(4, {paths: ["monthsnapshots"]})
+	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["monthsnapshots"]})
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -275,7 +308,7 @@ async function finance_add_monthsnapshot(req:any, res:any) {
 
 
 
-async function set_account_balances(req:any, res:any) {
+async function set_source_balances(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
 
@@ -283,9 +316,28 @@ async function set_account_balances(req:any, res:any) {
     const r = await Finance.Set_Account_Balances(SERVER_MAINS.db, accounts)
 	if (r === null) { res.status(400).send(); return; }
 
-	SERVER_MAINS.sse.TriggerEvent(4, {paths: ["sources"]})
+	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["sources"]})
 
     res.status(200).send(JSON.stringify(r))
+}
+
+
+
+
+async function move_transactions(req:any, res:any) {
+
+	 debugger
+	if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+	const from_cat_id = (req.body?.from_cat_id||'').toString().trim()
+	const to_cat_id   = (req.body?.to_cat_id||'').toString().trim()
+
+	const result = await Move_Transactions(SERVER_MAINS.db, {from_cat_id, to_cat_id}).catch(()=> null)
+	if (!result) { res.status(400).send(); return }
+
+	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["transactions"]})
+
+	res.status(200).send(JSON.stringify(result))
 }
 
 
