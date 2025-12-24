@@ -2,53 +2,44 @@
  
  import { ServerMainsT } from './defs_server_symlink.js'
  import Finance from "./finance.js"
- import FinanceYnabTransactions from "./finance_ynabtransactions.js"
  import Admin_Firestore from "./admin/admin_firestore.js"
+ import Admin_Sanity from './admin/admin_sanity.js'
  import Sheets from "./sheets.js"
- import Ai from "./ai.js"
  import DownloadTransactionsToCSV  from './download_transactions_to_csv.js'
- import AppleFuncs  from './apple_funcs.js'
- import { Move_Transactions } from './move_transactions.js'
+ import { SearchTransactions } from './search_transactions.js'
  
- 
- const ynab_account_ids = {
- 	holdem: "b0b3f2b2-5067-4f57-a248-15fa97a18cf5",
- 	family: "dbb7396b-413f-40d7-9a3f-7c986e485233"
- }
 
 
 
 const SERVER_MAINS:ServerMainsT = { 
 	app:{}, 
 	db:{}, 
-	mdb:{},
+	pg:{},
 	appversion:0, 
 	sheets:{}, 
-	gemini:{},
 	push_subscriptions:{}, 
 	firestore: {},
 	influxdb:{}, 
 	emailing:{},
+	utils:{},
 	sse:{},
 	validate_request: (_req:any) => Promise.resolve(""),
-	multer_upload:{}
 }
 
 
 function Set_Server_Mains(m:ServerMainsT) {
 	SERVER_MAINS.app = m.app 
 	SERVER_MAINS.db = m.db
-	SERVER_MAINS.mdb = m.mdb
+	SERVER_MAINS.pg = m.pg
 	SERVER_MAINS.appversion = m.appversion
 	SERVER_MAINS.sheets = m.sheets
-	SERVER_MAINS.gemini = m.gemini
 	SERVER_MAINS.push_subscriptions = m.push_subscriptions
 	SERVER_MAINS.firestore = m.firestore
 	SERVER_MAINS.influxdb = m.influxdb
 	SERVER_MAINS.emailing = m.emailing
+	SERVER_MAINS.utils = m.utils
 	SERVER_MAINS.sse = m.sse
 	SERVER_MAINS.validate_request = m.validate_request
-	SERVER_MAINS.multer_upload = m.multer_upload
 }
 
 
@@ -58,25 +49,25 @@ function Set_Routes() {
 
     SERVER_MAINS.app.get(   '/api/xen/finance/download_csv/transactions',					  download_csv_transactions)       
 
-    SERVER_MAINS.app.post(  '/api/xen/finance/ai/chat_about_transactions',					  ai_chat_about_transactions)       
-
-    SERVER_MAINS.app.post(  '/api/xen/finance/parse_apple_screenshot',						  SERVER_MAINS.multer_upload.single('image_screenshot'), parse_apple_screenshot)       
-    SERVER_MAINS.app.get(   '/api/xen/finance/parse_apple_csv_month',						  parse_apple_csv_month)       
-
     SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_balances',						      sheets_get_balances)       
     SERVER_MAINS.app.get(   '/api/xen/finance/sheets/get_transactions',                       sheets_get_transactions)
 
      SERVER_MAINS.app.post(  '/api/xen/finance/update_merchant_name_in_all_transactions',     update_merchant_name_in_all_transactions)
      SERVER_MAINS.app.post(  '/api/xen/finance/transactions/:transactionid/update_tag',       update_transaction_tag)
+     SERVER_MAINS.app.post(  '/api/xen/finance/transactions/search',                          search_transactions)
      SERVER_MAINS.app.post(  '/api/xen/finance/cats/:catid/update_quadrant',                  update_category_quadrant)
      SERVER_MAINS.app.post(  '/api/xen/finance/save_quick_note',                              firestore_save_quick_note)
+     SERVER_MAINS.app.get(   '/api/xen/finance/get_cats_for_apple_shortcuts',                 get_cats_for_apple_shortcuts)
      SERVER_MAINS.app.post(  '/api/xen/finance/add_monthsnapshot',                            finance_add_monthsnapshot)
      SERVER_MAINS.app.post(  '/api/xen/finance/set_source_balances',						  set_source_balances)       
-     SERVER_MAINS.app.post(  '/api/xen/finance/move_transactions',                            move_transactions)
+     SERVER_MAINS.app.post(  '/api/xen/finance/save_transactions',                            save_transactions)
+     SERVER_MAINS.app.post(  '/api/xen/finance/ignore_transaction',                           ignore_transaction)
 
 
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_update',                            admin_firestore_misc_update)
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_get',                               admin_firestore_misc_get)
+
+    SERVER_MAINS.app.get(  '/api/xen/admin/sanity_run',                                       admin_sanity_run)
 }
 
 
@@ -99,49 +90,6 @@ function Set_Routes() {
 
 
 
-async function ai_chat_about_transactions(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-	const question = req.body.question
-
-    const r = await Ai.ChatAboutTransactions(SERVER_MAINS.db, SERVER_MAINS.gemini, question)
-	if (r === null) { res.status(400).send(); return; }
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
-
-
-async function parse_apple_screenshot(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-	const image_screenshot_buffer = req.file.buffer
-	const image_base64 = image_screenshot_buffer.toString('base64')
-	const localnow = req.body.localnow
-
-    const r = await AppleFuncs.ParseAppleScreenShot(SERVER_MAINS.db, SERVER_MAINS.gemini, image_base64, localnow)
-	if (r === null) { res.status(400).send(); return; }
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
-
-
-async function parse_apple_csv_month(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const r = await AppleFuncs.ParseAppleMonthCSV(SERVER_MAINS.db)
-	if (r === null) { res.status(400).send(); return; }
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
 async function sheets_get_balances(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
@@ -156,24 +104,14 @@ async function sheets_get_balances(req:any, res:any) {
 
 
 async function sheets_get_transactions(req:any, res:any) {
-    
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
 
-    const response = await Sheets.Get_Latest_Transactions(SERVER_MAINS.db, SERVER_MAINS.sheets)
+	const decodedTokenOrNull = await SERVER_MAINS.validate_request(res, req) 
+	if (!decodedTokenOrNull) return
+
+
+    const response = await Sheets.Get_Latest_Transactions(SERVER_MAINS.db, SERVER_MAINS.sheets, req.query.user)
 	if (response === null) { res.status(400).send(); return; }
     res.status(200).send(JSON.stringify(response))
-}
-
-
-
-async function grab_em(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const r = await Finance.Grab_Em(SERVER_MAINS.db, ynab_account_ids)
-	if (r === null) { res.status(400).send(); return; }
-
-    res.status(200).send(JSON.stringify(r))
 }
 
 
@@ -208,21 +146,6 @@ async function ignore_transaction(req:any, res:any) {
 
 
 
-async function patch_buckets(req:any, res:any) {
-
-    if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-    const r = await Finance.Patch_Buckets(SERVER_MAINS.db, req.body.catupdates, req.body.area_id, req.body.area_buckets_changed)
-	if (r === null) { res.status(400).send(); return; }
-
-	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["cats","areas"]})
-
-    res.status(200).send(JSON.stringify(r))
-}
-
-
-
-
 async function update_merchant_name_in_all_transactions(req:any, res:any) {
 
     if (! await SERVER_MAINS.validate_request(res, req)) return 
@@ -247,6 +170,21 @@ async function update_transaction_tag(req:any, res:any) {
 	if (!r) { res.status(400).send(); return; }
 
 	SERVER_MAINS.sse.TriggerEvent("datasync_doc_patch", {path: "transactions/" + req.body.docid, data: r})
+
+    res.status(200).send(JSON.stringify(r))
+}
+
+
+
+
+async function search_transactions(req:any, res:any) {
+
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+	const search_criterias = req.body.search_criterias as any[]
+
+    const r = await SearchTransactions(SERVER_MAINS.db, search_criterias)
+	if (!r) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))
 }
@@ -284,10 +222,22 @@ async function update_category_quadrant(req:any, res:any) {
 
 async function firestore_save_quick_note(req:any, res:any) {
 
-    const r = await Finance.Save_Quick_Note(SERVER_MAINS.db, Number(req.body.amount), req.body.note)
+	 debugger
+    const r = await Finance.Save_Quick_Note(SERVER_MAINS.db, Number(req.body.amount), req.body.note, req.body.cat, req.body.user )
 	if (r === null) { res.status(400).send(); return; }
 
     res.status(200).send("ok")
+}
+
+
+
+
+async function get_cats_for_apple_shortcuts(req:any, res:any) {
+
+    const r = await Finance.GetCatsForAppleShortcuts(SERVER_MAINS.db, req.query.areaname)
+	if (r === null) { res.status(400).send(); return; }
+
+    res.status(200).send(r)
 }
 
 
@@ -324,25 +274,6 @@ async function set_source_balances(req:any, res:any) {
 
 
 
-async function move_transactions(req:any, res:any) {
-
-	 debugger
-	if (! await SERVER_MAINS.validate_request(res, req)) return 
-
-	const from_cat_id = (req.body?.from_cat_id||'').toString().trim()
-	const to_cat_id   = (req.body?.to_cat_id||'').toString().trim()
-
-	const result = await Move_Transactions(SERVER_MAINS.db, {from_cat_id, to_cat_id}).catch(()=> null)
-	if (!result) { res.status(400).send(); return }
-
-	SERVER_MAINS.sse.TriggerEvent("datasync_collection", {paths: ["transactions"]})
-
-	res.status(200).send(JSON.stringify(result))
-}
-
-
-
-
 async function admin_firestore_misc_update(req:any, res:any) {
     
     if (! await SERVER_MAINS.validate_request(res, req)) return 
@@ -365,6 +296,17 @@ async function admin_firestore_misc_get(req:any, res:any) {
 
 
 
+async function admin_sanity_run(req:any, res:any) {
+    
+    if (! await SERVER_MAINS.validate_request(res, req)) return 
+
+    const results = await Admin_Sanity.Run(SERVER_MAINS.db)
+    res.status(200).send(JSON.stringify(results))
+}
+
+
+
+
 
 
 
@@ -375,10 +317,9 @@ async function admin_firestore_misc_get(req:any, res:any) {
 
 const INSTANCEID            = "xen"
 const PROJECTID             = "xenition"
-const KEYJSONFILE           = "/Users/dave/.ssh/xenition_local.json"
-const SHEETS_KEYJSONFILE    = "/Users/dave/.ssh/xenition-sheets-244e0733ca64.json"
+const KEYJSONFILE           = "/Users/dave/.ssh/xenition-webapp-key.json"
 const IDENTITY_PLATFORM_API = "AIzaSyDfXcwqyiRGGO6pMBsG8CvNEtDIhdspKRI"
 
-export default { INSTANCEID, PROJECTID, KEYJSONFILE, IDENTITY_PLATFORM_API, SHEETS_KEYJSONFILE, Set_Server_Mains, Set_Routes};
+export default { INSTANCEID, PROJECTID, KEYJSONFILE, IDENTITY_PLATFORM_API, Set_Server_Mains, Set_Routes};
 
 

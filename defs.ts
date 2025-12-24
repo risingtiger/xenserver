@@ -6,6 +6,7 @@ import { bool, str, num } from './defs_server_symlink.js'
 
 export type AreaT = {
     id: string,
+	unfixedcosts: number,
 	bucketquad3: number,
 	bucketquad3_ref_ts: number,
 	bucketquad4: number,
@@ -17,10 +18,12 @@ export type AreaT = {
 
 export type CatT = {
     id: string,
-    arearef: AreaT,
+    arearef: AreaT|null,
     bucket: number|null,
-    budget: number|null,
-	payments_budget:number|null,
+    costs: number|null,
+	costs_from_payments:number|null,
+	costs_total:number|null,
+	goal:number|null,
     name: string,
     parentref: CatT|null,
     subsref: CatT[]|null,
@@ -32,9 +35,12 @@ export type CatT = {
 export type SourceT = {
     id: string,
     ts: number,
+	longname:string,
     name: string
 	balance: number|null
-	type: string
+	description:string,
+	type: string,
+    arearef: AreaT,
 }
 
 export type TagT = {
@@ -48,7 +54,6 @@ export type TagT = {
 export type TransactionT = {
     id: string,
     amount: number,
-    arearef: AreaT,
     catref: CatT,
     merchant: string,
     ts: number,
@@ -62,13 +67,15 @@ export type CatCalcsT = {
     catref:  CatT,
     subsref: CatCalcsT[]|null,
     sums: Array<number>,
-    budget: number,
+    costs: number,
+    goal: number,
     med:  number,
     avg:  number,
 }
 export type CatCalcsTotalsT = {
     sums: Array<number>,
-    budget: number,
+    allotment: number,
+	allotment_left: number,
     med: number,
     avg: number,
 }
@@ -77,10 +84,10 @@ export type MonthSnapShotT = {
     arearef: AreaT,
     month: string,
 	issaved:bool,
-	quad1_budget: number,
-	quad2_budget: number,
-	quad3_budget: number,
-	quad4_budget: number,
+	quad1_costs: number,
+	quad2_costs: number,
+	quad3_costs: number,
+	quad4_costs: number,
 	quad1_spent: number,
 	quad2_spent: number,
 	quad3_spent: number,
@@ -101,7 +108,7 @@ export type AvgsSnapShotT = {
 }
 
 export type FilterT = {
-    arearef: AreaT|null,
+	arearef: AreaT|null,
     parentcatref: CatT|null,
     catref: CatT|null,
     cattags: number[],
@@ -144,7 +151,6 @@ export type AreaQuadBucketTotalsT = {
 }
 
 
-
 export type SheetsTransactionT = {
 	id: string,
 	date: number, // Unix timestamp in seconds
@@ -156,6 +162,7 @@ export type SheetsTransactionT = {
 	tags: string[],
 }
 
+
 export type SaveNewTransactionServerT = {
     amount: number,
 	cat: string,
@@ -166,3 +173,18 @@ export type SaveNewTransactionServerT = {
 	tags: string[],
     sheets_id: string|null,
 }
+
+
+
+
+export type QuickNoteT = {
+    amount: number
+    note: string,
+	parentcatname: string,
+	childcatname: string,
+	user: string,
+    ts: number,
+}
+
+
+

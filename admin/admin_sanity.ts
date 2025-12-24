@@ -2,7 +2,8 @@
 
 //type str = string; //type int = number; type bool = boolean;
 
-import {FieldValue} from "@google-cloud/firestore"
+//@ts-ignore
+//import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
 
 
@@ -10,22 +11,44 @@ import {FieldValue} from "@google-cloud/firestore"
 
 const Run = async (db: any) => new Promise<any>(async (res, _rej)=> {
 
-	const ts = Math.floor(Date.now()/1000)
+	const [paymentsSnapshot, catsSnapshot] = await Promise.all([
+		db.collection("payments").get(),
+		db.collection("cats").get()
+	])
 
-	const collection = db.collection("payments")
-	const snapshot = await collection.get()
-	//const catRef = db.doc('cats/72dda9c4-27f9-4459-853c-a00631795909')
-	//const snapshot = await collection.where('cat', '==', catRef).get()
-	const items = snapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+	let return_str = ""
 
-	for (const t of items) {
-		const updateobj = {
-			ts,
-			payments_budget: FieldValue.delete(),
+	const payments = paymentsSnapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+	const cats = catsSnapshot.docs.map((m: any) => ({ id: m.id, ...m.data() }));
+
+	for (const p of payments) {
+		if (!p.cat) continue;
+
+		const cat = cats.find((c:any) => c.id === p.cat._path.segments[1])
+		if (!cat) {
+			return_str += p.payee + " payment is attached to a cat that does not exist" + '\n'
+			continue
+		}
+
+		if (cat.tags[0] !== 1) {
+			return_str += p.payee + " payment is attached to a cat that is not type fixed" + '\n'
 		}
 	}
 
-	res({return_str:"Done Sanity Run"})
+	for (const c of cats) {
+
+		if (!c.tags) continue; // is parent cat
+		if (c.tags[0] !== 1) continue;
+
+		const matched_payments = payments.filter((p:any)=> p.cat && p.cat._path.segments[1] === c.id)
+		
+		if (!c.costs && !matched_payments.length) {
+			return_str += c.name + " is fixed but has no recorded costs or payments" + '\n'
+		}
+	}
+
+	return_str += "done"
+	res({return_str})
 })
 
 const Admin_Sanity = { Run };

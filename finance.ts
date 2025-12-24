@@ -1,7 +1,3 @@
-
-
-
-
 //import {FieldValue} from "@google-cloud/firestore"
 //import fs from "fs";
 import { SaveNewTransactionServerT } from './defs.js'
@@ -222,7 +218,6 @@ Kinda fucked! There is no real way to determine if transaction has already been 
 */
 async function Save_Transactions(db:any, new_transactions:( SaveNewTransactionServerT & {ts:number} )[]) {   return new Promise<number|null>(async (res, _rej)=> {
     
-	debugger
     const batch = db.batch();
     const now = Math.floor(Date.now() / 1000);
     const savedTransactions:{[key:string]:any}[] = [];
@@ -337,6 +332,7 @@ async function Update_Merchant_Name_In_All_Transactions(db:any, newname:string, 
 
 async function Update_Transaction_Tag(db:any, docid:string, tagid:string) {   return new Promise<any>(async (res, _rej)=> {
 
+	debugger
 	const now = Math.floor(Date.now() / 1000)
 
 	const tg  = tagid === 'none' ? [] : [db.collection("tags").doc(tagid)]
@@ -355,6 +351,24 @@ async function Update_Transaction_Tag(db:any, docid:string, tagid:string) {   re
 	da.source = {__path: da.source._path.segments }
 
     res(da)
+
+
+
+	function parsedocdata_for_client(data:any) {
+
+		for (const key in data) {
+			const value = data[key]
+			// Check if value is not null/undefined and is an object
+			if (value && typeof value === 'object') {
+				// Then check for _path property
+				if (value._path) {
+					data[key] = { __path: value._path.segments }
+				}
+			}
+		}
+		
+		return data
+	}
 })}
 
 
@@ -433,14 +447,22 @@ async function Patch_Buckets(db:any, catupdates:{id:string,bucket:number}[], are
 
 
 
-const Save_Quick_Note = (db:any, amount:number, note:string) => new Promise<any|null>(async (res, _rej)=> {
+const Save_Quick_Note = (db:any, amount:number, note:string, cat:string, user:string) => new Promise<any|null>(async (res, _rej)=> {
 
 	const docRef = db.collection('quick_notes').doc();
+
+	const catsplit = cat.split(" -> ")
+	if (catsplit.length !== 2) { res(null); return; }
+	const parentcatname = catsplit[0].trim()
+	const childcatname  = catsplit[1].trim()
 
 	try {
 		await docRef.set({
 			amount: amount,
 			note: note,
+			parentcatname,
+			childcatname,
+			user: user,
 			ts: Math.floor(Date.now() / 1000)
 		});
 	}
@@ -477,8 +499,8 @@ async function Add_MonthSnapshot(db:any, monthSnapshot:any) {   return new Promi
 
 async function Set_Account_Balances(db:any, accounts:{id:string, balance:number}[]) {   return new Promise<any>(async (res, rej)=> {
     
+    const now = Math.floor(Date.now() / 1000)
     const batch = db.batch();
-    const now   = Math.floor(Date.now() / 1000);
     
     for (const account of accounts) {
         const docRef = db.collection('sources').doc(account.id);
@@ -492,11 +514,63 @@ async function Set_Account_Balances(db:any, accounts:{id:string, balance:number}
 		await batch.commit() 
 	} 
 	catch {
-		res(null);
+		rej(null);
 		return;
 	}
 
     res(1);
+})}
+
+
+
+
+async function GetCatsForAppleShortcuts(db:any,areaname:string) {   return new Promise<any>(async (res, rej)=> {
+    
+    try {
+        const catsSnapshot = await db.collection('cats').get();
+        //const areasSnapshot = await db.collection('areas').get();
+        const cats = catsSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+        //const areas = areasSnapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
+
+        const catMap: Map<string, any> = new Map(cats.map((c: any) => [c.id, c]));
+        const parents: { name: string, childcats: string[], area: any }[] = [];
+
+        for (const cat of cats) {
+            if (!cat.parent) {
+                parents.push({ name: cat.name, childcats: [], area: cat.area });
+            }
+        }
+
+        for (const cat of cats) {
+            if (cat.parent) {
+                const parent = catMap.get(cat.parent.id);
+                if (parent) {
+                    const parentObj = parents.find((p) => p.name === parent.name);
+                    if (parentObj) {
+                        parentObj.childcats.push(cat.name);
+                    }
+                }
+            }
+        }
+
+        let filteredParents = parents;
+        if (areaname === 'fam') {
+            const includeeAreaId = 'dbb7396b-413f-40d7-9a3f-7c986e485233';
+            filteredParents = parents.filter((p) => p.area._path.segments[1] === includeeAreaId);
+        }
+
+        const result: string[] = [];
+        for (const parent of filteredParents) {
+            for (const child of parent.childcats) {
+                result.push(`${parent.name} -> ${child}`);
+            }
+        }
+
+        res(result.join(', '));
+
+    } catch (error) {
+        rej(null);
+    }
 })}
 
 
@@ -507,8 +581,6 @@ async function Set_Account_Balances(db:any, accounts:{id:string, balance:number}
 
 
 
-const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Update_Transaction_Tag, Update_Category_Quadrant, Patch_Buckets, Update_Merchant_Name_In_All_Transactions, Save_Quick_Note, Add_MonthSnapshot, Set_Account_Balances };
+const Finance = { Grab_Em, YNAB_Sync_Categories, Save_Transactions, Ignore_Transaction, Patch_Transaction, Update_Transaction_Tag, Update_Category_Quadrant, Patch_Buckets, Update_Merchant_Name_In_All_Transactions, Save_Quick_Note, Add_MonthSnapshot, Set_Account_Balances, GetCatsForAppleShortcuts };
 
 export default Finance;
-
-
