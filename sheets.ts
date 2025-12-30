@@ -21,6 +21,8 @@ const spreadsheetId = '1JtnmJL642Vuu8ajPLMyyqMbHP7FtddtmxHExsUAekEA';
 
 const Get_Latest_Transactions = (db:any, sheets:any, user_email:string) => new Promise<any[] | null>(async (res, rej)=> {
 
+	debugger
+
 	let ignored_transaction_sheets_ids: string[] = []
 	let existing_transactions_sheets_ids: any[]  = []
 	let quick_notes: QuickNoteT[]                = []
