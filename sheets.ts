@@ -31,12 +31,13 @@ const Get_Latest_Transactions = (db:any, sheets:any, user_email:string) => new P
 	let sheet_transactions:any[]                 = []
 
 	const three_months_ago = Math.floor(Date.now() / 1000) - (3 * 30 * 24 * 60 * 60); // 3 months in seconds
-	const one_month_ago = Math.floor(Date.now() / 1000) - (1 * 30 * 24 * 60 * 60); // 1 month in seconds
+	const five_months_ago = Math.floor(Date.now() / 1000) - (5 * 30 * 24 * 60 * 60);
 
 	try {
 		const ignored_transactions_promise  = db.collection("ignored_transactions").where("ts", ">=", three_months_ago).orderBy("ts", "desc").get()
-		const existing_transactions_promise = db.collection("transactions").where("date", ">=", three_months_ago).orderBy("date", "desc").get()
-		const quick_notes_promise           = db.collection("quick_notes").where("ts", ">=", one_month_ago).orderBy("ts", "desc").get()
+		//const existing_transactions_promise = db.collection("transactions").where("date", ">=", three_months_ago).orderBy("date", "desc").get()
+		const existing_transactions_promise = db.collection("transactions").where("date", ">=", five_months_ago).orderBy("date", "desc").get()
+		const quick_notes_promise           = db.collection("quick_notes").where("ts", ">=", three_months_ago).orderBy("ts", "desc").get()
 		const cats_promise                  = db.collection("cats").get()
 		const sheetspullinfo_promise        = db.collection("generaldata").doc('sheetspull').get()
 		
@@ -64,7 +65,6 @@ const Get_Latest_Transactions = (db:any, sheets:any, user_email:string) => new P
 	}
 	catch (e) { rej(); return; }
 
-	let   rowrecord1monthback = 0;
 	const transactions: SheetsTransactionT[] = []
 	
 	for(let i = 0; i < sheet_transactions.length; i++) {
@@ -82,10 +82,6 @@ const Get_Latest_Transactions = (db:any, sheets:any, user_email:string) => new P
 		const date_str           = t[0] || '';
 		const [year, month, day] = date_str.split('-').map(Number);
 		const date_timestamp     = Date.UTC(year, month - 1, day, 12) / 1000; // make sure its going to show same day whether in UTC or local
-
-		if (!rowrecord1monthback && date_timestamp >= one_month_ago) {
-			rowrecord1monthback = i + sheetspullinfo.rowstart;
-		}
 		
 		const amount_str         = t[1] || '0';
 		if (!amount_str.includes('(')) continue; // skip anything except debits
@@ -112,11 +108,6 @@ const Get_Latest_Transactions = (db:any, sheets:any, user_email:string) => new P
 		};
 		
 		transactions.push(transaction);
-	}
-
-	if (rowrecord1monthback) {
-		try		  { await db.collection("generaldata").doc('sheetspull').update({ rowstart: rowrecord1monthback }); } 
-		catch (e) { console.log(`Failed to update sheetspull rowstart ${e}`);										}
 	}
 
 	res(transactions);

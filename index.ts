@@ -183,7 +183,7 @@ async function search_transactions(req:any, res:any) {
 
 	const search_criterias = req.body.search_criterias as any[]
 
-    const r = await SearchTransactions(SERVER_MAINS.db, search_criterias)
+    const r = await SearchTransactions(SERVER_MAINS.db, SERVER_MAINS.firestore, search_criterias)
 	if (!r) { res.status(400).send(); return; }
 
     res.status(200).send(JSON.stringify(r))

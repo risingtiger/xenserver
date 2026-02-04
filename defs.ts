@@ -44,6 +44,7 @@ export type SourceT = {
 }
 
 export type TagT = {
+	arearef: AreaT,
     id: string,
     name: string,
 	sort: number,

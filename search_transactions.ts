@@ -8,7 +8,7 @@ type fieldnames = 'amount'|'merchant'|'notes'|'source';
 type SearchCriteriaT = { field: fieldnames, val: string|number }
 
 
-export const SearchTransactions = (db:any, search_criterias: SearchCriteriaT[]) => new Promise<TransactionT[]>(async (res, rej)=> {
+export const SearchTransactions = (db:any, firestore:any, search_criterias: SearchCriteriaT[]) => new Promise<TransactionT[]>(async (res, rej)=> {
 
 	let validatedCriteria:any
 	let snapshot:any;
@@ -24,6 +24,7 @@ export const SearchTransactions = (db:any, search_criterias: SearchCriteriaT[]) 
 	const transactions: TransactionT[] = snapshot.docs.map((doc:any) => {
 
 		const transaction = { ...doc.data(), id: doc.id } as TransactionT;
+		if (transaction.merchant === undefined || transaction.merchant === null) debugger
 		transaction.merchant = transaction.merchant.toLowerCase();
 		transaction.notes    = transaction.notes.toLowerCase();
 		return transaction;
@@ -57,7 +58,7 @@ export const SearchTransactions = (db:any, search_criterias: SearchCriteriaT[]) 
 		});
 	}, transactions).sort((a:any, b:any) => b.date - a.date);
 
-	res(filteredResults);
+	res(filteredResults.map(( fr:any )=> firestore.ParseDocDataForClient(fr)))
 })
 
 
