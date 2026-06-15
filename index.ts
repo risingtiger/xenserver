@@ -15,6 +15,8 @@ const SERVER_MAINS:ServerMainsT = {
 	app:{}, 
 	db:{}, 
 	pg:{},
+	storage:{}, 
+	ai:{},
 	appversion:0, 
 	sheets:{}, 
 	push_subscriptions:{}, 
@@ -31,6 +33,8 @@ function Set_Server_Mains(m:ServerMainsT) {
 	SERVER_MAINS.app = m.app 
 	SERVER_MAINS.db = m.db
 	SERVER_MAINS.pg = m.pg
+	SERVER_MAINS.storage = m.storage
+	SERVER_MAINS.ai = m.ai
 	SERVER_MAINS.appversion = m.appversion
 	SERVER_MAINS.sheets = m.sheets
 	SERVER_MAINS.push_subscriptions = m.push_subscriptions
@@ -67,6 +71,7 @@ function Set_Routes() {
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_update',                            admin_firestore_misc_update)
     SERVER_MAINS.app.get(  '/api/xen/admin/firestore_misc_get',                               admin_firestore_misc_get)
 
+
     SERVER_MAINS.app.get(  '/api/xen/admin/sanity_run',                                       admin_sanity_run)
 }
 
@@ -74,8 +79,8 @@ function Set_Routes() {
 
  
  // -- ROUTE HANDLERS --
- 
- 
+
+
  async function download_csv_transactions(req:any, res:any) {
 
 

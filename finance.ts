@@ -213,16 +213,46 @@ async function YNAB_Sync_Categories(db:any, Firestore:any) {   return new Promis
 
 
 
-/*
-Kinda fucked! There is no real way to determine if transaction has already been processed and saved. There can split etc. It just don'st workw
-*/
 async function Save_Transactions(db:any, new_transactions:( SaveNewTransactionServerT & {ts:number} )[]) {   return new Promise<number|null>(async (res, _rej)=> {
     
-    const batch = db.batch();
-    const now = Math.floor(Date.now() / 1000);
-    const savedTransactions:{[key:string]:any}[] = [];
+	const batch = db.batch();
+	const now = Math.floor(Date.now() / 1000);
+	const existing_transaction_sheets_ids = new Set<string>();
+	const new_transaction_sheets_ids = Array.from(new Set(new_transactions.map((transaction:any) => {
+		return String(transaction.sheets_id || '').trim()
+	}).filter((sheets_id:string) => sheets_id)))
+
+	try {
+		const chunk_size = 10
+		const existing_transactions_promises:any[] = []
+
+		for (let i = 0; i < new_transaction_sheets_ids.length; i += chunk_size) {
+			const sheets_ids_chunk = new_transaction_sheets_ids.slice(i, i + chunk_size)
+			existing_transactions_promises.push(db.collection("transactions").where("sheets_id", "in", sheets_ids_chunk).get())
+		}
+
+		const existing_transactions_snaps = await Promise.all(existing_transactions_promises)
+
+		for (const snap of existing_transactions_snaps) {
+			for (const doc of snap.docs) {
+				const sheets_id = String(doc.data().sheets_id || '').trim()
+				if (!sheets_id) continue
+				existing_transaction_sheets_ids.add(sheets_id)
+			}
+		}
+	}
+	catch {
+		res(null)
+		return
+	}
+
+	let save_count = 0
 
 	for (const transaction of new_transactions) {
+		const sheets_id = String(transaction.sheets_id || '').trim()
+		if (sheets_id && existing_transaction_sheets_ids.has(sheets_id)) continue
+
+		transaction.sheets_id = sheets_id || null
 		transaction.cat = db.collection("cats").doc(transaction.cat);
 		transaction.source = db.collection("sources").doc(transaction.source);
 		transaction.tags = transaction.tags.map((m:string) => db.collection("tags").doc(m));
@@ -230,9 +260,10 @@ async function Save_Transactions(db:any, new_transactions:( SaveNewTransactionSe
 
 		const docref = db.collection('transactions').doc();
 		batch.set(docref, transaction);
-		
-		savedTransactions.push({ id: docref.id, ...transaction });
+		save_count++
 	}
+
+	if (save_count === 0) { res(0); return; }
 
 	const r = await batch.commit().catch(()=> null)
 	res(r)

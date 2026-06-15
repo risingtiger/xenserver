@@ -1,6 +1,7 @@
 
 
-import { bool, str, num } from './defs_server_symlink.js'
+import { bool } from './defs_server_symlink.js'
+
 
 
 
@@ -133,7 +134,8 @@ export type PaymentT = {
     is_auto: boolean,
     sourceref: SourceT|null,
     breakdown: Array<string>,
-    notes: string
+    notes: string,
+    merchantstr: string
 }
 
 
